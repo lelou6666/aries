@@ -8,5 +8,11 @@ target/
 *.iml
 *.iws
 *.ipr
+<<<<<<< HEAD
 velocity.log
 
+=======
+.idea
+velocity.log
+derby.log
+>>>>>>> refs/remotes/apache/trunk

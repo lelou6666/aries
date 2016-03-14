@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+<?xml version="1.0" encoding="UTF-8"?>
+>>>>>>> refs/remotes/apache/trunk
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -17,6 +21,7 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<<<<<<< HEAD
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.aries</groupId>
@@ -28,12 +33,28 @@
     <artifactId>org.apache.aries.util</artifactId>
     <packaging>bundle</packaging>
     <version>0.3.2-SNAPSHOT</version>
+=======
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>org.apache.aries.util-parent</artifactId>
+    <packaging>pom</packaging>
+    <version>1.1.2-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     <name>Apache Aries Util</name>
     <description>
         This bundle contains the OSGi common util for Apache Aries
     </description>
 
     <scm>
+<<<<<<< HEAD
         <connection>scm:svn:http://svn.apache.org/repos/asf/aries/branches/blueprint-0.3.2-fixes/util</connection>
         <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/branches/blueprint-0.3.2-fixes/util</developerConnection>
         <url>http://svn.apache.org/viewvc/aries/branches/blueprint-0.3.2-fixes/util</url>
@@ -89,5 +110,16 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+=======
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/util</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/util</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/util</url>
+    </scm>
+
+    <modules>
+        <module>util-r42</module>
+        <module>util</module>
+    </modules>
+>>>>>>> refs/remotes/apache/trunk
 
 </project>
