@@ -31,7 +31,11 @@ public class BlueprintName extends AbstractName
 
   public BlueprintName(String name) throws InvalidNameException
   {
+<<<<<<< HEAD
     super(split(name));
+=======
+    super(name);
+>>>>>>> refs/remotes/apache/trunk
   }
 
   public BlueprintName(Name name) throws InvalidNameException

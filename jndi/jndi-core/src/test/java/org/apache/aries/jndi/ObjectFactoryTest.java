@@ -20,7 +20,13 @@ package org.apache.aries.jndi;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
+<<<<<<< HEAD
 
+=======
+import static org.junit.Assert.assertTrue;
+
+import java.util.Dictionary;
+>>>>>>> refs/remotes/apache/trunk
 import java.util.Hashtable;
 import java.util.Properties;
 
@@ -96,7 +102,11 @@ public class ObjectFactoryTest
     Properties props = new Properties();
     props.setProperty("osgi.jndi.urlScheme", "wibble");
 
+<<<<<<< HEAD
     bc.registerService(ObjectFactory.class.getName(), factory, props);
+=======
+    bc.registerService(ObjectFactory.class.getName(), factory, (Dictionary) props);
+>>>>>>> refs/remotes/apache/trunk
 
     Reference ref = new Reference(null);
     ref.add(new StringRefAddr("URL", "wibble"));
@@ -112,7 +122,11 @@ public class ObjectFactoryTest
     URLObjectFactoryFinder factory = Skeleton.newMock(URLObjectFactoryFinder.class);
     Skeleton.getSkeleton(factory).setReturnValue(new MethodCall(ObjectFactory.class, "getObjectInstance", Object.class, Name.class, Context.class, Hashtable.class), testObject);
 
+<<<<<<< HEAD
     bc.registerService(URLObjectFactoryFinder.class.getName(), factory, new Properties());
+=======
+    bc.registerService(URLObjectFactoryFinder.class.getName(), factory, (Dictionary) new Properties());
+>>>>>>> refs/remotes/apache/trunk
 
     Reference ref = new Reference(null);
     ref.add(new StringRefAddr("URL", "wibble"));
@@ -179,4 +193,43 @@ public class ObjectFactoryTest
 
     assertSame("The naming manager should have returned the reference object", ref, obj);
   }
+<<<<<<< HEAD
+=======
+  
+  @Test
+  public void testFactoriesThatDoUnsafeCastsAreIgnored() throws Exception {
+    Hashtable<String, Object> props = new Hashtable<String, Object>();
+    props.put("aries.object.factory.requires.reference", Boolean.TRUE);
+    bc.registerService(ObjectFactory.class.getName(), new ObjectFactory() {
+      
+      public Object getObjectInstance(Object arg0, Name arg1, Context arg2, Hashtable<?, ?> arg3)
+          throws Exception
+      {
+        return (Reference)arg0;
+      }
+    }, props);
+
+    NamingManager.getObjectInstance("Some dummy data", null, null, env);
+  }
+  
+  public static class DummyObjectFactory implements ObjectFactory {
+
+        public Object getObjectInstance(Object obj, Name name, Context nameCtx,
+                Hashtable<?, ?> environment) throws Exception {
+            // TODO Auto-generated method stub
+            return new String ("pass");
+        }
+  }
+      
+  @Test
+  public void testContextDotObjectFactories() throws Exception { 
+      env.put(Context.OBJECT_FACTORIES, "org.apache.aries.jndi.ObjectFactoryTest$DummyObjectFactory");
+      Reference ref = new Reference("anything");
+      Object obj = NamingManager.getObjectInstance(ref, null, null, env);
+      assertTrue (obj instanceof String);
+      assertEquals ((String)obj, "pass");
+      env.remove(Context.OBJECT_FACTORIES);
+  }
+
+>>>>>>> refs/remotes/apache/trunk
 }

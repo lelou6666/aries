@@ -49,6 +49,14 @@ public class OSGiObjectFactoryBuilder implements ObjectFactoryBuilder, ObjectFac
                                     Name name,
                                     Context nameCtx,
                                     Hashtable<?, ?> environment) throws Exception {
+<<<<<<< HEAD
+=======
+        
+        if (environment == null) {
+            environment = new Hashtable();
+        }
+        
+>>>>>>> refs/remotes/apache/trunk
         BundleContext callerContext = getCallerBundleContext(environment);
         if (callerContext == null) {
             return obj;
@@ -62,6 +70,14 @@ public class OSGiObjectFactoryBuilder implements ObjectFactoryBuilder, ObjectFac
                                     Context nameCtx,
                                     Hashtable<?, ?> environment,
                                     Attributes attrs) throws Exception {
+<<<<<<< HEAD
+=======
+        
+        if (environment == null) {
+            environment = new Hashtable();
+        }
+        
+>>>>>>> refs/remotes/apache/trunk
         BundleContext callerContext = getCallerBundleContext(environment);
         if (callerContext == null) {
             return obj;
@@ -71,10 +87,18 @@ public class OSGiObjectFactoryBuilder implements ObjectFactoryBuilder, ObjectFac
     }
 
     private BundleContext getCallerBundleContext(Hashtable<?, ?> environment) throws NamingException {
+<<<<<<< HEAD
+=======
+        AugmenterInvokerImpl.getInstance().augmentEnvironment(environment);
+>>>>>>> refs/remotes/apache/trunk
         BundleContext context = Utils.getBundleContext(environment, NamingManager.class);        
         if (context == null) {
             context = Utils.getBundleContext(environment, DirectoryManager.class);
         }
+<<<<<<< HEAD
+=======
+        AugmenterInvokerImpl.getInstance().unaugmentEnvironment(environment);
+>>>>>>> refs/remotes/apache/trunk
         return context;
     }
 }

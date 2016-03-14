@@ -77,6 +77,17 @@ public class DirObjectFactoryHelper extends ObjectFactoryHelper implements DirOb
             }
         }
 
+<<<<<<< HEAD
+=======
+        // Extra, non-standard, bonus step. If javax.naming.OBJECT_FACTORIES is set as 
+        // a property in the environment, use its value to construct additional object factories. 
+        // Added under Aries-822, with reference 
+        // to https://www.osgi.org/bugzilla/show_bug.cgi?id=138 
+        if (result == null || result == obj) {
+            result = getObjectInstanceViaContextDotObjectFactories(obj, name, nameCtx, environment, attrs);
+        } 
+        
+>>>>>>> refs/remotes/apache/trunk
         return (result == null) ? obj : result;
     }
 
@@ -86,6 +97,7 @@ public class DirObjectFactoryHelper extends ObjectFactoryHelper implements DirOb
                                                          Hashtable<?, ?> environment,
                                                          Attributes attrs) 
         throws Exception {
+<<<<<<< HEAD
     	
         Object result = null;
         ServiceReference[] refs = Utils.getReferencesPrivileged(callerContext, DirObjectFactory.class);
@@ -107,6 +119,32 @@ public class DirObjectFactoryHelper extends ObjectFactoryHelper implements DirOb
         			break;
         		}
         	}
+=======
+        
+        Object result = null;
+        ServiceReference[] refs = Utils.getReferencesPrivileged(callerContext, DirObjectFactory.class);
+        if (refs != null) {
+            Arrays.sort(refs, Utils.SERVICE_REFERENCE_COMPARATOR);
+            for (ServiceReference ref : refs) {
+              
+                if (canCallObjectFactory(obj, ref)) {
+                    DirObjectFactory factory = (DirObjectFactory) Utils.getServicePrivileged(callerContext, ref);
+    
+                    try {
+                        result = factory.getObjectInstance(obj, name, nameCtx, environment, attrs);
+                    } finally {
+                        callerContext.ungetService(ref);
+                    }
+    
+                    // if the result comes back and is not null and not the reference
+                    // object then we should return the result, so break out of the
+                    // loop we are in.
+                    if (result != null && result != obj) {
+                        break;
+                    }
+                }
+            }
+>>>>>>> refs/remotes/apache/trunk
         }
 
         if (result == null) {
@@ -116,6 +154,22 @@ public class DirObjectFactoryHelper extends ObjectFactoryHelper implements DirOb
         return (result == null) ? obj : result;
     }
 
+<<<<<<< HEAD
+=======
+    private boolean canCallObjectFactory(Object obj, ServiceReference ref)
+    {
+      if (obj instanceof Reference) return true;
+      
+      Object prop = ref.getProperty("aries.object.factory.requires.reference");
+      
+      if (prop == null) return true;
+      
+      if (prop instanceof Boolean) return !!!(Boolean) prop; // if set to true we don't call.
+      
+      return true;
+    }
+
+>>>>>>> refs/remotes/apache/trunk
     private Object getObjectInstanceUsingClassName(Object reference,
                                                    String className,
                                                    Object obj,
@@ -129,8 +183,13 @@ public class DirObjectFactoryHelper extends ObjectFactoryHelper implements DirOb
         Object result = null;
         
         if (tuple.second != null) {
+<<<<<<< HEAD
         	try {
         		result = ((DirObjectFactory) tuple.second).getObjectInstance(reference, name, nameCtx, environment, attrs);
+=======
+            try {
+                result = ((DirObjectFactory) tuple.second).getObjectInstance(reference, name, nameCtx, environment, attrs);
+>>>>>>> refs/remotes/apache/trunk
             } finally {
                 defaultContext.ungetService(tuple.first);
             }
@@ -148,6 +207,7 @@ public class DirObjectFactoryHelper extends ObjectFactoryHelper implements DirOb
         ObjectFactory factory = null;
         ServiceReference[] refs = Utils.getReferencesPrivileged(callerContext, ObjectFactoryBuilder.class);
         if (refs != null) {
+<<<<<<< HEAD
         	Arrays.sort(refs, Utils.SERVICE_REFERENCE_COMPARATOR);
         	for (ServiceReference ref : refs) {
         		ObjectFactoryBuilder builder = (ObjectFactoryBuilder) Utils.getServicePrivileged(callerContext, ref);
@@ -162,6 +222,22 @@ public class DirObjectFactoryHelper extends ObjectFactoryHelper implements DirOb
         			break;
         		}
         	}
+=======
+            Arrays.sort(refs, Utils.SERVICE_REFERENCE_COMPARATOR);
+            for (ServiceReference ref : refs) {
+                ObjectFactoryBuilder builder = (ObjectFactoryBuilder) Utils.getServicePrivileged(callerContext, ref);
+                try {
+                    factory = builder.createObjectFactory(obj, environment);
+                } catch (NamingException e) {
+                    // TODO: log it
+                } finally {
+                    callerContext.ungetService(ref);
+                }
+                if (factory != null) {
+                    break;
+                }
+            }
+>>>>>>> refs/remotes/apache/trunk
         }
 
         Object result = null;

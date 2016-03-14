@@ -29,8 +29,16 @@ import javax.naming.NamingException;
 import javax.naming.OperationNotSupportedException;
 
 import org.osgi.framework.BundleContext;
+<<<<<<< HEAD
 import org.osgi.service.jndi.JNDIConstants;
 
+=======
+import org.osgi.framework.ServiceReference;
+import org.osgi.service.jndi.JNDIConstants;
+
+import org.apache.aries.jndi.spi.AugmenterInvoker;
+
+>>>>>>> refs/remotes/apache/trunk
 public abstract class AbstractServiceRegistryContext implements Context
 {
 
@@ -41,6 +49,11 @@ public abstract class AbstractServiceRegistryContext implements Context
   protected NameParser parser = new OsgiNameParser();
   private static final String ARIES_SERVICES = "aries:services/";
 
+<<<<<<< HEAD
+=======
+  private static AugmenterInvoker augmenterInvoker = null;
+
+>>>>>>> refs/remotes/apache/trunk
   @SuppressWarnings("unchecked")
   public AbstractServiceRegistryContext(BundleContext callerContext, Hashtable<?, ?> environment)
   {
@@ -48,7 +61,17 @@ public abstract class AbstractServiceRegistryContext implements Context
     env.putAll((Map<? extends String, ? extends Object>) environment);
     // ARIES-397:, If the caller has provided a BundleContext
     // in the hashtable, use this in preference to callerContext
+<<<<<<< HEAD
     BundleContext bc = (BundleContext) env.get(JNDIConstants.BUNDLE_CONTEXT);
+=======
+    if (augmenterInvoker == null && callerContext != null) {
+      ServiceReference augmenterSR = callerContext.getServiceReference(AugmenterInvoker.class.getName());
+      if (augmenterSR != null) augmenterInvoker = (AugmenterInvoker) callerContext.getService(augmenterSR);
+    }
+    if (augmenterInvoker != null) augmenterInvoker.augmentEnvironment(environment);
+    BundleContext bc = (BundleContext) env.get(JNDIConstants.BUNDLE_CONTEXT);
+    if (augmenterInvoker != null) augmenterInvoker.unaugmentEnvironment(environment);
+>>>>>>> refs/remotes/apache/trunk
     if (bc != null) { 
       this.callerContext = bc;
     } else { 
@@ -61,9 +84,23 @@ public abstract class AbstractServiceRegistryContext implements Context
   {
     env = new HashMap<String, Object>();
     env.putAll((Map<? extends String, ? extends Object>) environment);
+<<<<<<< HEAD
     // ARIES-397: If the caller has provided a BundleContext
     // in the hashtable, use this in preference to callerContext
     BundleContext bc = (BundleContext) env.get(JNDIConstants.BUNDLE_CONTEXT);
+=======
+    Hashtable<String, Object> environmentHT = new Hashtable<String,Object>();
+    environmentHT.putAll(env);
+    // ARIES-397: If the caller has provided a BundleContext
+    // in the hashtable, use this in preference to callerContext
+    if (augmenterInvoker == null && callerContext != null) {
+      ServiceReference augmenterSR = callerContext.getServiceReference(AugmenterInvoker.class.getName());
+      if (augmenterSR != null) augmenterInvoker = (AugmenterInvoker) callerContext.getService(augmenterSR);
+    }
+    if (augmenterInvoker != null) augmenterInvoker.augmentEnvironment(environmentHT); 
+    BundleContext bc = (BundleContext) env.get(JNDIConstants.BUNDLE_CONTEXT);
+    if (augmenterInvoker != null) augmenterInvoker.unaugmentEnvironment(environmentHT);
+>>>>>>> refs/remotes/apache/trunk
     if (bc != null) { 
       this.callerContext = bc;
     } else { 

@@ -46,6 +46,7 @@ public class OsgiURLContextFactory implements ObjectFactory {
         if (obj == null) {
             return new ServiceRegistryContext(callerContext, environment);
         } else if (obj instanceof String) {
+<<<<<<< HEAD
             Context ctx = null;
             try {
                 ctx = new ServiceRegistryContext(callerContext, environment);
@@ -80,4 +81,38 @@ public class OsgiURLContextFactory implements ObjectFactory {
         return null;
     }
 
+=======
+        	return findAny(environment, (String)obj);
+        } else if (obj instanceof String[]) {
+            return findAny(environment, (String[]) obj);
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Try each URL until either lookup succeeds or they all fail
+     */
+	private Object findAny(Hashtable<?, ?> environment, String ... urls)
+			throws ConfigurationException, NamingException {
+		if (urls.length == 0) {
+		    throw new ConfigurationException("0");
+		}
+		Context context = new ServiceRegistryContext(callerContext, environment);
+		try {
+		    NamingException ne = null;
+		    for (int i = 0; i < urls.length; i++) {
+		        try {
+		            return context.lookup(urls[i]);
+		        } catch (NamingException e) {
+		            ne = e;
+		        }
+		    }
+		    throw ne;
+		} finally {
+		    context.close();
+		}
+	}
+
+>>>>>>> refs/remotes/apache/trunk
 }

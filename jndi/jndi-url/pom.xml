@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+<?xml version="1.0" encoding="UTF-8"?>
+>>>>>>> refs/remotes/apache/trunk
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -17,28 +21,51 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<<<<<<< HEAD
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.aries</groupId>
         <artifactId>java5-parent</artifactId>
         <version>0.5</version>
         <relativePath />
+=======
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../../parent/pom.xml</relativePath>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.jndi</groupId>
     <artifactId>org.apache.aries.jndi.url</artifactId>
     <packaging>bundle</packaging>
     <name>Apache Aries JNDI URL Handler</name>
+<<<<<<< HEAD
     <version>0.3.2-SNAPSHOT</version>
+=======
+    <version>1.1.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     <description>
       This bundle contains the JNDI URL handler for OSGi
     </description>
 
+<<<<<<< HEAD
      <scm>
          <connection>scm:svn:http://svn.apache.org/repos/asf/aries/branches/dec-2011-jndi-release/jndi/jndi-url</connection>
          <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/branches/dec-2011-jndi-release/jndi/jndi-url</developerConnection>
          <url>http://svn.apache.org/viewvc/aries/branches/dec-2011-jndi-release/jndi/jndi-url</url>
      </scm>
+=======
+    <scm>
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/jndi/jndi-url</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/jndi/jndi-url</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/jndi/jndi-url</url>
+    </scm>
+>>>>>>> refs/remotes/apache/trunk
 
     <properties>
         <!-- Export package versions are maintained in packageinfo files -->
@@ -51,6 +78,7 @@
         <aries.osgi.activator>
             org.apache.aries.jndi.url.Activator
         </aries.osgi.activator>
+<<<<<<< HEAD
         <!-- 
           We use the range macro to get a 0.x to 0.x+1 version range while Aries is still
           stabilizing API. This should be removed once the dependency is available at a 
@@ -61,6 +89,17 @@
           org.osgi.service.blueprint.container;resolution:=optional,
           *
         </aries.osgi.import.pkg>
+=======
+        <aries.osgi.import.pkg>
+          org.osgi.service.blueprint.container;resolution:=optional,
+          *
+        </aries.osgi.import.pkg>
+        <aries.osgi.import.service>
+          org.apache.aries.proxy.ProxyManager
+        </aries.osgi.import.service>
+        <lastReleaseVersion>1.0.0</lastReleaseVersion>
+        
+>>>>>>> refs/remotes/apache/trunk
     </properties>
 
     <dependencies>
@@ -68,17 +107,29 @@
             <groupId>org.apache.aries.jndi</groupId>
             <artifactId>org.apache.aries.jndi.api</artifactId>
             <scope>provided</scope>
+<<<<<<< HEAD
             <version>0.3</version>
+=======
+            <version>1.1.0</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
         <dependency>
             <groupId>org.apache.aries</groupId>
             <artifactId>org.apache.aries.util</artifactId>
+<<<<<<< HEAD
             <version>0.4</version>
+=======
+            <version>1.0.0</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
         <dependency>
             <groupId>org.apache.aries.proxy</groupId>
             <artifactId>org.apache.aries.proxy.api</artifactId>
+<<<<<<< HEAD
             <version>0.4</version>
+=======
+            <version>1.0.0</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
         <dependency>
             <groupId>org.osgi</groupId>
@@ -94,13 +145,21 @@
             <groupId>org.apache.aries.jndi</groupId>
             <artifactId>org.apache.aries.jndi.core</artifactId>
             <scope>test</scope>
+<<<<<<< HEAD
             <version>0.3.1</version>
+=======
+            <version>1.0.0</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
         <dependency>
             <groupId>org.apache.aries.testsupport</groupId>
             <artifactId>org.apache.aries.testsupport.unit</artifactId>
             <scope>test</scope>
+<<<<<<< HEAD
             <version>0.4</version>
+=======
+            <version>1.0.0</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -112,8 +171,31 @@
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
+<<<<<<< HEAD
 
 
     </dependencies>
 
+=======
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.aries.versioning</groupId>
+                <artifactId>org.apache.aries.versioning.plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-verify</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>version-check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+>>>>>>> refs/remotes/apache/trunk
 </project>

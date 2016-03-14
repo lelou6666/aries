@@ -34,7 +34,14 @@ import org.apache.aries.jndi.OSGiInitialContextFactoryBuilder;
 import org.apache.aries.jndi.OSGiObjectFactoryBuilder;
 import org.apache.aries.jndi.ProviderAdminServiceFactory;
 import org.apache.aries.jndi.Utils;
+<<<<<<< HEAD
 import org.apache.aries.jndi.spi.EnvironmentAugmentation;
+=======
+import org.apache.aries.jndi.AugmenterInvokerImpl;
+import org.apache.aries.jndi.spi.EnvironmentAugmentation;
+import org.apache.aries.jndi.spi.EnvironmentUnaugmentation;
+import org.apache.aries.jndi.spi.AugmenterInvoker;
+>>>>>>> refs/remotes/apache/trunk
 import org.apache.aries.jndi.tracker.ServiceTrackerCustomizers;
 import org.apache.aries.jndi.urls.URLObjectFactoryFinder;
 import org.osgi.framework.BundleActivator;
@@ -62,6 +69,10 @@ public class Activator implements BundleActivator {
     private static ServiceTracker initialContextFactories;
     private static ServiceTracker objectFactories;
     private static ServiceTracker environmentAugmentors;
+<<<<<<< HEAD
+=======
+    private static ServiceTracker environmentUnaugmentors;
+>>>>>>> refs/remotes/apache/trunk
 
     public void start(BundleContext context) {
 
@@ -70,6 +81,10 @@ public class Activator implements BundleActivator {
         icfBuilders = initServiceTracker(context, InitialContextFactoryBuilder.class, ServiceTrackerCustomizers.LAZY);
         urlObjectFactoryFinders = initServiceTracker(context, URLObjectFactoryFinder.class, ServiceTrackerCustomizers.LAZY);
         environmentAugmentors = initServiceTracker(context, EnvironmentAugmentation.class, null);
+<<<<<<< HEAD
+=======
+        environmentUnaugmentors = initServiceTracker(context, EnvironmentUnaugmentation.class, null);
+>>>>>>> refs/remotes/apache/trunk
 
         try {
             OSGiInitialContextFactoryBuilder builder = new OSGiInitialContextFactoryBuilder();
@@ -78,7 +93,14 @@ public class Activator implements BundleActivator {
         } catch (NamingException e) {
             LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.ICFB"), e);
         } catch (IllegalStateException e) {
+<<<<<<< HEAD
             LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.ICFB.already.exists", getClassName(InitialContextFactoryBuilder.class)), e);
+=======
+            // Log the problem at info level, but only log the exception at debug level, as in many cases this is not a real issue and people
+            // don't want to see stack traces at info level when everything it working as expected.
+            LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.ICFB.already.exists", getClassName(InitialContextFactoryBuilder.class)));
+            LOGGER.debug(Utils.MESSAGES.getMessage("unable.to.set.static.ICFB.already.exists", getClassName(InitialContextFactoryBuilder.class)), e);
+>>>>>>> refs/remotes/apache/trunk
         }
 
         try {
@@ -88,7 +110,14 @@ public class Activator implements BundleActivator {
         } catch (NamingException e) {
             LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.OFB"), e);
         } catch (IllegalStateException e) {
+<<<<<<< HEAD
             LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.OFB.already.exists", getClassName(InitialContextFactoryBuilder.class)), e);
+=======
+            // Log the problem at info level, but only log the exception at debug level, as in many cases this is not a real issue and people
+            // don't want to see stack traces at info level when everything it working as expected.
+            LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.OFB.already.exists", getClassName(InitialContextFactoryBuilder.class)));
+            LOGGER.debug(Utils.MESSAGES.getMessage("unable.to.set.static.OFB.already.exists", getClassName(InitialContextFactoryBuilder.class)), e);
+>>>>>>> refs/remotes/apache/trunk
         }
 
         context.registerService(JNDIProviderAdmin.class.getName(),
@@ -102,6 +131,13 @@ public class Activator implements BundleActivator {
         context.registerService(JNDIContextManager.class.getName(),
                                 new ContextManagerServiceFactory(),
                                 null);
+<<<<<<< HEAD
+=======
+               context.registerService(AugmenterInvoker.class.getName(),
+                                               AugmenterInvokerImpl.getInstance(),
+                                               null);
+
+>>>>>>> refs/remotes/apache/trunk
     }
 
     private String getClassName(Class<?> expectedType)
@@ -145,6 +181,10 @@ public class Activator implements BundleActivator {
         objectFactories.close();
         initialContextFactories.close();
         environmentAugmentors.close();
+<<<<<<< HEAD
+=======
+        environmentUnaugmentors.close();
+>>>>>>> refs/remotes/apache/trunk
     }
 
     /*
@@ -196,4 +236,13 @@ public class Activator implements BundleActivator {
     {
       return environmentAugmentors.getServices();
     }
+<<<<<<< HEAD
+=======
+
+    public static Object[] getEnvironmentUnaugmentors()
+    {
+      return environmentUnaugmentors.getServices();
+    }
+
+>>>>>>> refs/remotes/apache/trunk
 }

@@ -26,20 +26,49 @@ import javax.naming.Name;
 import javax.naming.spi.ObjectFactory;
 
 import org.osgi.framework.Bundle;
+<<<<<<< HEAD
 import org.osgi.framework.BundleContext;
 import org.osgi.service.jndi.JNDIConstants;
 
 public class BlueprintURLContextFactory implements ObjectFactory {
 
   final private Bundle _callersBundle;
+=======
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceReference;
+import org.osgi.service.jndi.JNDIConstants;
+
+import org.apache.aries.jndi.spi.AugmenterInvoker;
+
+public class BlueprintURLContextFactory implements ObjectFactory {
+
+  final private Bundle _callersBundle;
+
+  private static AugmenterInvoker augmenterInvoker = null;
+>>>>>>> refs/remotes/apache/trunk
 
   public BlueprintURLContextFactory(Bundle callersBundle) {
     _callersBundle = callersBundle;
   }
 
   @Override
+<<<<<<< HEAD
   public Object getObjectInstance(Object obj, Name name, Context callersCtx, Hashtable<?, ?> envmt) throws Exception {
     BundleContext bc = (BundleContext) envmt.get(JNDIConstants.BUNDLE_CONTEXT);
+=======
+  public Object getObjectInstance(Object obj, Name name, Context callersCtx, Hashtable<?, ?> envmt) throws Exception {
+
+    if (augmenterInvoker == null && _callersBundle != null) {
+      BundleContext callerBundleContext = _callersBundle.getBundleContext();
+      ServiceReference augmenterSR = callerBundleContext.getServiceReference(AugmenterInvoker.class.getName());
+      if (augmenterSR != null) augmenterInvoker = (AugmenterInvoker) callerBundleContext.getService(augmenterSR);
+    }
+    if (augmenterInvoker != null) augmenterInvoker.augmentEnvironment(envmt);
+
+    BundleContext bc = (BundleContext) envmt.get(JNDIConstants.BUNDLE_CONTEXT);
+    if (augmenterInvoker != null) augmenterInvoker.unaugmentEnvironment(envmt);
+   
+>>>>>>> refs/remotes/apache/trunk
     Bundle b = (bc != null)? bc.getBundle() : null;
     Object result = null;
     if (obj == null) {

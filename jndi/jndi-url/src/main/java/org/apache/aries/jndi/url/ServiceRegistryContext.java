@@ -117,6 +117,7 @@ public class ServiceRegistryContext extends AbstractServiceRegistryContext imple
     }
 
     private OsgiName convert(Name name) throws NamingException {
+<<<<<<< HEAD
         OsgiName result;
 
         if (name instanceof OsgiName) {
@@ -130,6 +131,15 @@ public class ServiceRegistryContext extends AbstractServiceRegistryContext imple
         }
 
         return result;
+=======
+        if (name instanceof OsgiName) {
+            return (OsgiName) name;
+        } else if (parentName != null) {
+            return new OsgiName(parentName.toString() + "/" + name.toString());
+        } else {
+            return (OsgiName) parser.parse(name.toString());
+        }
+>>>>>>> refs/remotes/apache/trunk
     }
 
     private Name parse(String name) throws NamingException {

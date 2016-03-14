@@ -44,7 +44,11 @@ public final class OsgiName extends AbstractName
   
   public OsgiName(String name) throws InvalidNameException
   {
+<<<<<<< HEAD
     super(split(name));
+=======
+    super(name);
+>>>>>>> refs/remotes/apache/trunk
   }
 
   public OsgiName(Name name) throws InvalidNameException

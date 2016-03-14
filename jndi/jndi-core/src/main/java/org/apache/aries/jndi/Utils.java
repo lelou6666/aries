@@ -28,8 +28,11 @@ import java.util.Map;
 
 import javax.naming.NamingException;
 
+<<<<<<< HEAD
 import org.apache.aries.jndi.spi.EnvironmentAugmentation;
 import org.apache.aries.jndi.startup.Activator;
+=======
+>>>>>>> refs/remotes/apache/trunk
 import org.apache.aries.util.nls.MessageUtil;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
@@ -199,6 +202,7 @@ public final class Utils {
 		});
     }
 
+<<<<<<< HEAD
     public static void augmentEnvironment(Hashtable<?, ?> environment) 
     {
       Object[] objects = Activator.getEnvironmentAugmentors();
@@ -212,3 +216,6 @@ public final class Utils {
       }
     }
 }
+=======
+}
+>>>>>>> refs/remotes/apache/trunk

@@ -23,6 +23,11 @@ import java.security.PrivilegedAction;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Hashtable;
+<<<<<<< HEAD
+=======
+import java.util.logging.Level;
+import java.util.logging.Logger;
+>>>>>>> refs/remotes/apache/trunk
 
 import javax.naming.Context;
 import javax.naming.Name;
@@ -31,6 +36,11 @@ import javax.naming.RefAddr;
 import javax.naming.Reference;
 import javax.naming.Referenceable;
 import javax.naming.StringRefAddr;
+<<<<<<< HEAD
+=======
+import javax.naming.directory.Attributes;
+import javax.naming.spi.DirObjectFactory;
+>>>>>>> refs/remotes/apache/trunk
 import javax.naming.spi.ObjectFactory;
 import javax.naming.spi.ObjectFactoryBuilder;
 
@@ -43,6 +53,10 @@ public class ObjectFactoryHelper implements ObjectFactory {
     
     protected BundleContext defaultContext;
     protected BundleContext callerContext;
+<<<<<<< HEAD
+=======
+    private static final Logger logger = Logger.getLogger(ObjectFactoryHelper.class.getName());
+>>>>>>> refs/remotes/apache/trunk
 
     public ObjectFactoryHelper(BundleContext defaultContext, BundleContext callerContext) {
         this.defaultContext = defaultContext;
@@ -58,6 +72,11 @@ public class ObjectFactoryHelper implements ObjectFactory {
         if (obj instanceof Referenceable) {
             obj = ((Referenceable) obj).getReference();
         }
+<<<<<<< HEAD
+=======
+        
+        if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "obj = " + obj);
+>>>>>>> refs/remotes/apache/trunk
 
         Object result = obj;
 
@@ -74,22 +93,111 @@ public class ObjectFactoryHelper implements ObjectFactory {
                 result = getObjectInstanceUsingRefAddress(ref.getAll(), obj, name, nameCtx, environment);
             }
         }
+<<<<<<< HEAD
+=======
+        
+		if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "Step 4: result = " + result);
+>>>>>>> refs/remotes/apache/trunk
 
         // Step 5 - if we still don't have a resolved object goto the object factory builds in the SR.
         if (result == null || result == obj) {
             result = getObjectInstanceUsingObjectFactoryBuilders(obj, name, nameCtx, environment);
         }
 
+<<<<<<< HEAD
         // Step 6 - finally as a last ditch effort attempt to use all the registered ObjectFactories in the SR.
+=======
+		if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "Step 5: result = " + result);
+
+        // Step 6 - Attempt to use all the registered ObjectFactories in the SR.
+>>>>>>> refs/remotes/apache/trunk
         if (result == null || result == obj) {                
             if ((obj instanceof Reference && ((Reference) obj).getFactoryClassName() == null) ||
                 !(obj instanceof Reference)) {
                 result = getObjectInstanceUsingObjectFactories(obj, name, nameCtx, environment);
             }
         }
+<<<<<<< HEAD
 
         return (result == null) ? obj : result;
     }
+=======
+ 
+		if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "Step 6: result = " + result);
+
+		// Extra, non-standard, bonus step 7. If javax.naming.OBJECT_FACTORIES is set as 
+		// a property in the environment, use its value to construct additional object factories. 
+		// Added under Aries-822, with reference 
+		// to https://www.osgi.org/bugzilla/show_bug.cgi?id=138 
+		if (result == null || result == obj) {
+			result = getObjectInstanceViaContextDotObjectFactories(obj, name, nameCtx, environment);
+		} 
+		
+		if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "Step 7: result = " + result);
+
+        return (result == null) ? obj : result;
+    }
+ 
+    /*
+     * Attempt to obtain an Object instance via the java.naming.factory.object property
+     */
+    protected Object getObjectInstanceViaContextDotObjectFactories(Object obj,
+            Name name,
+            Context nameCtx,
+            Hashtable<?, ?> environment) throws Exception
+    {
+    	return getObjectInstanceViaContextDotObjectFactories(obj, name, nameCtx, environment, null);
+    }
+    
+    /*
+     * Attempt to obtain an Object instance via the java.naming.factory.object property
+     */
+    protected Object getObjectInstanceViaContextDotObjectFactories(Object obj,
+            Name name,
+            Context nameCtx,
+            Hashtable<?, ?> environment,
+            Attributes attrs) throws Exception
+    {
+    	Object result = null;
+    	String factories = (String) environment.get(Context.OBJECT_FACTORIES);
+		if (factories != null && factories.length() > 0) {
+			String[] candidates = factories.split(":");
+			ClassLoader cl = AccessController.doPrivileged(new PrivilegedAction<ClassLoader>() {
+				public ClassLoader run() {
+					return Thread.currentThread().getContextClassLoader();
+				}
+			});
+			for (String cand : candidates) {
+				ObjectFactory factory = null;
+				try {
+					@SuppressWarnings("unchecked")
+					Class<ObjectFactory> clz = (Class<ObjectFactory>) cl.loadClass(cand);
+					factory = clz.newInstance();
+				} catch (Exception e) {
+					if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "Exception instantiating factory: " + e);
+					continue;
+				}
+				if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "cand=" + cand + " factory=" + factory);
+				if (factory != null) {
+					if(factory instanceof DirObjectFactory)
+					{
+						if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "its a DirObjectFactory");
+						final DirObjectFactory dirFactory = (DirObjectFactory) factory;
+						result = dirFactory.getObjectInstance(obj, name, nameCtx, environment, attrs);
+					}
+					else
+					{
+						if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "its an ObjectFactory");
+						result = factory.getObjectInstance(obj, name, nameCtx, environment);
+					}
+				}
+				if (result != null && result != obj) break;
+			}
+		}
+		if (logger.isLoggable(Level.FINE)) logger.log(Level.FINE, "result = " + result);
+		return (result == null) ? obj : result;
+    }
+>>>>>>> refs/remotes/apache/trunk
 
     protected Object getObjectInstanceUsingObjectFactories(Object obj,
                                                            Name name,
@@ -103,6 +211,10 @@ public class ObjectFactoryHelper implements ObjectFactory {
             Arrays.sort(refs, Utils.SERVICE_REFERENCE_COMPARATOR);
             
             for (ServiceReference ref : refs) {
+<<<<<<< HEAD
+=======
+              if (canCallObjectFactory(obj, ref)) {
+>>>>>>> refs/remotes/apache/trunk
                 ObjectFactory factory = (ObjectFactory) Utils.getServicePrivileged(callerContext, ref);
 
                 try {
@@ -119,12 +231,32 @@ public class ObjectFactoryHelper implements ObjectFactory {
                 if (result != null && result != obj) {
                     break;
                 }
+<<<<<<< HEAD
+=======
+              }
+>>>>>>> refs/remotes/apache/trunk
             }
         }
 
         return (result == null) ? obj : result;
     }
 
+<<<<<<< HEAD
+=======
+    private boolean canCallObjectFactory(Object obj, ServiceReference ref)
+    {
+      if (obj instanceof Reference) return true;
+      
+      Object prop = ref.getProperty("aries.object.factory.requires.reference");
+      
+      if (prop == null) return true;
+      
+      if (prop instanceof Boolean) return !!!(Boolean) prop; // if set to true we don't call.
+      
+      return true;
+    }
+
+>>>>>>> refs/remotes/apache/trunk
     protected static String getUrlScheme(String name) {
         String scheme = name;   
         int index = name.indexOf(':');

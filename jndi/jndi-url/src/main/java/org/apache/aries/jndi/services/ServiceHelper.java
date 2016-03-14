@@ -23,10 +23,20 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+=======
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> refs/remotes/apache/trunk
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -111,7 +121,12 @@ public final class ServiceHelper
       BundleContext systemBundle = AccessController.doPrivileged(new PrivilegedAction<BundleContext>() {
         public BundleContext run()
         {
+<<<<<<< HEAD
           return ctx.getBundle(0).getBundleContext();
+=======
+        	 Bundle system = ctx.getBundle(0); 
+        	 return system == null ? null : system.getBundleContext(); 
+>>>>>>> refs/remotes/apache/trunk
         }
       });
       if (systemBundle == null) systemBundle = ctx;
@@ -284,7 +299,11 @@ public final class ServiceHelper
       result = AccessController.doPrivileged(new PrivilegedAction<Object>() {
         public Object run()
         {
+<<<<<<< HEAD
           return proxyPriviledged(interface1, filter, rebind, ctx, pair, timeout);
+=======
+          return proxyPrivileged(interface1, filter, rebind, ctx, pair, timeout);
+>>>>>>> refs/remotes/apache/trunk
         }
       });
 
@@ -298,7 +317,11 @@ public final class ServiceHelper
     return result;
   }
 
+<<<<<<< HEAD
   private static Object proxyPriviledged(String interface1, String filter, boolean dynamicRebind, BundleContext ctx, ServicePair pair, int timeout)
+=======
+  private static Object proxyPrivileged(String interface1, String filter, boolean dynamicRebind, BundleContext ctx, ServicePair pair, int timeout)
+>>>>>>> refs/remotes/apache/trunk
   {
     String[] interfaces = null;
     if (interface1 != null) {
@@ -309,6 +332,7 @@ public final class ServiceHelper
 
     List<Class<?>> clazz = new ArrayList<Class<?>>(interfaces.length);
 
+<<<<<<< HEAD
     // We load the interface classes the service is registered under using
     // the defining
     // bundle. This is ok because the service must be able to see the
@@ -336,6 +360,31 @@ public final class ServiceHelper
 
     ProxyManager proxyManager = Activator.getProxyManager();
 
+=======
+    // We load the interface classes the service is registered under using the defining bundle. 
+    // This is ok because the service must be able to see the classes to be registered using them. 
+    // We then check to see if isAssignableTo on the reference  works for the owning bundle and 
+    // the interface name and only use the interface if true is returned there.
+
+    // This might seem odd, but equinox and felix return true for isAssignableTo if the 
+    // Bundle provided does not import the package. This is under the assumption the
+    // caller will then use reflection. The upshot of doing it this way is that a utility
+    // bundle can be created which centralizes JNDI lookups, but the service will be used
+    // by another bundle. It is true that class space consistency is less safe, but we
+    // are enabling a slightly odd use case anyway.
+    
+    // August 13th 2013: We've found valid use cases in which a Bundle is exporting 
+    // services that the Bundle itself cannot load. We deal with this rare case by
+    // noting the classes that we failed to load. If as a result we have no classes 
+    // to proxy, we try those classes again but instead pull the Class objects off 
+    // the service rather than from the bundle exporting that service. 
+
+    Bundle serviceProviderBundle = pair.ref.getBundle();
+    Bundle owningBundle = ctx.getBundle();
+    ProxyManager proxyManager = Activator.getProxyManager();
+
+    Collection<String> classesNotFound = new ArrayList<String>();
+>>>>>>> refs/remotes/apache/trunk
     for (String interfaceName : interfaces) {
       try {
         Class<?> potentialClass = serviceProviderBundle.loadClass(interfaceName);
@@ -343,9 +392,34 @@ public final class ServiceHelper
           clazz.add(potentialClass);
         }
       } catch (ClassNotFoundException e) {
+<<<<<<< HEAD
       }
     }
 
+=======
+      	classesNotFound.add(interfaceName);
+      }
+    }
+    
+    if (clazz.isEmpty() && !classesNotFound.isEmpty()) { 
+			Class<?> ifacesOnService[] = ctx.getService(pair.ref).getClass().getInterfaces();
+    	for (String interfaceName : classesNotFound) {
+    		Class<?> thisClass = null;
+    		for (Class<?> c : getAllInterfaces(ifacesOnService)) { 
+    			if (c.getName().equals(interfaceName)) { 
+    				thisClass = c;
+    				break;
+    			}
+    		}
+    		if (thisClass != null) { 
+    			if (pair.ref.isAssignableTo(owningBundle, interfaceName)) {
+    				clazz.add(thisClass);
+    			}
+    		}
+    	}
+    }
+    
+>>>>>>> refs/remotes/apache/trunk
     if (clazz.isEmpty()) {
       throw new IllegalArgumentException(Arrays.asList(interfaces).toString());
     }
@@ -414,7 +488,11 @@ public final class ServiceHelper
       refs = ctx.getServiceReferences(interface1, filter);
 
       if (refs == null || refs.length == 0) {
+<<<<<<< HEAD
         refs = ctx.getServiceReferences(null, "(" + JNDIConstants.JNDI_SERVICENAME + "="
+=======
+        refs = ctx.getServiceReferences((String) null, "(" + JNDIConstants.JNDI_SERVICENAME + "="
+>>>>>>> refs/remotes/apache/trunk
             + serviceName + ')');
       }
     } catch (InvalidSyntaxException e) {
@@ -437,6 +515,7 @@ public final class ServiceHelper
   public static Object getService(BundleContext ctx, ServiceReference ref)
   {
     Object service = ctx.getService(ref);
+<<<<<<< HEAD
 
     Object result = null;
 
@@ -451,4 +530,30 @@ public final class ServiceHelper
     return result;
   }
  
+=======
+    if (service == null) {
+      return null;
+    }
+
+    ServicePair pair = new ServicePair();
+    pair.ref = ref;
+    pair.service = service;
+    return proxy(null, null, false, ctx, pair, 0);
+  }
+ 
+  static Collection<Class<?>> getAllInterfaces (Class<?>[] baseInterfaces) 
+  {
+  	Set<Class<?>> result = new HashSet<Class<?>>();
+  	for (Class<?> c : baseInterfaces) {
+  		if (!c.equals(Object.class)) { 
+  			result.add (c);
+  			Class<?> ifaces[] = c.getInterfaces();
+  			if (ifaces.length != 0) { 
+  				result.addAll(getAllInterfaces(ifaces));
+  			}
+  		}
+  	}
+  	return result;
+  }
+>>>>>>> refs/remotes/apache/trunk
 }

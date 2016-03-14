@@ -18,6 +18,10 @@
  */
 package org.apache.aries.jndi.rmi;
 
+<<<<<<< HEAD
+=======
+import java.util.Dictionary;
+>>>>>>> refs/remotes/apache/trunk
 import java.util.Hashtable;
 
 import javax.naming.spi.ObjectFactory;
@@ -47,7 +51,11 @@ public class Activator implements BundleActivator {
             reg = context.registerService(
                         ObjectFactory.class.getName(),
                         ClassLoader.getSystemClassLoader().loadClass("com.sun.jndi.url.rmi.rmiURLContextFactory").newInstance(),
+<<<<<<< HEAD
                         props);
+=======
+                        (Dictionary) props);
+>>>>>>> refs/remotes/apache/trunk
         }
         catch (Exception e)
         {

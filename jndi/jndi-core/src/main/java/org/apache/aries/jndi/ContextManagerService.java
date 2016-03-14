@@ -71,7 +71,10 @@ public class ContextManagerService implements JNDIContextManager {
     
     private Context getInitialContext(Map<?,?> environment) throws NamingException {        
         Hashtable<?,?> env = Utils.toHashtable(environment);
+<<<<<<< HEAD
         Utils.augmentEnvironment(env);
+=======
+>>>>>>> refs/remotes/apache/trunk
         Context context = ContextHelper.getInitialContext(callerContext, env);
         contexts.add(context);
         return context;
