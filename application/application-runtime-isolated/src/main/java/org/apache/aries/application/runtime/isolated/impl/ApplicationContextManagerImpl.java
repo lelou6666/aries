@@ -23,8 +23,11 @@ import static org.apache.aries.application.utils.AppConstants.LOG_ENTRY;
 import static org.apache.aries.application.utils.AppConstants.LOG_EXCEPTION;
 import static org.apache.aries.application.utils.AppConstants.LOG_EXIT;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,12 +36,13 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.aries.application.DeploymentMetadata;
 import org.apache.aries.application.management.AriesApplication;
 import org.apache.aries.application.management.AriesApplicationContext;
+import org.apache.aries.application.management.AriesApplicationContext.ApplicationState;
 import org.apache.aries.application.management.ManagementException;
 import org.apache.aries.application.management.UpdateException;
-import org.apache.aries.application.management.AriesApplicationContext.ApplicationState;
 import org.apache.aries.application.management.spi.framework.BundleFrameworkManager;
 import org.apache.aries.application.management.spi.repository.BundleRepositoryManager;
 import org.apache.aries.application.management.spi.runtime.AriesApplicationContextManager;
+import org.apache.aries.application.utils.AppConstants;
 import org.osgi.framework.BundleException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,14 +61,18 @@ public class ApplicationContextManagerImpl implements AriesApplicationContextMan
     
     _appToContextMap = new ConcurrentHashMap<AriesApplication, AriesApplicationContext>();
     
+    // When doing isolated runtime support provisioning against the local repo is a really bad idea
+    // it can result in trying to install things into the shared framework into the local framework
+    // this doesn't work because we don't know how to install them into the shared framework and
+    // we can't just use them because they are in the local framework, so if this class is constructed
+    // we disable local provisioning.
+    System.setProperty(AppConstants.PROVISON_EXCLUDE_LOCAL_REPO_SYSPROP, "true");
+    
     LOGGER.debug(LOG_EXIT, "ApplicationContextImpl", this);
   }
 
   public void setBundleFrameworkManager(BundleFrameworkManager bfm)
   {
-    LOGGER.debug(LOG_ENTRY, "setBundleFrameworkManager", bfm);
-    LOGGER.debug(LOG_EXIT, "setBundleFrameworkManager");
-    
     _bundleFrameworkManager = bfm;
   }
   
@@ -119,42 +127,50 @@ public class ApplicationContextManagerImpl implements AriesApplicationContextMan
     return result;
   }
 
-  public synchronized void remove(AriesApplicationContext app) throws BundleException
+  public void remove(AriesApplicationContext app) throws BundleException
   {
     LOGGER.debug(LOG_ENTRY, "remove", app);
     
-    Iterator<Map.Entry<AriesApplication, AriesApplicationContext>> it = _appToContextMap.entrySet()
-        .iterator();
-
-    while (it.hasNext()) {
-      Map.Entry<AriesApplication, AriesApplicationContext> entry = it.next();
-
-      ApplicationContextImpl potentialMatch = (ApplicationContextImpl) entry.getValue();
-
-      if (potentialMatch == app) {
-        it.remove();
-
-        potentialMatch.uninstall();
-
-        break;
-      }
+    ApplicationContextImpl appToRemove = null;
+    synchronized (_appToContextMap) { 
+    	Iterator<Map.Entry<AriesApplication, AriesApplicationContext>> it = _appToContextMap.entrySet().iterator();
+    	while (it.hasNext()) {
+        Map.Entry<AriesApplication, AriesApplicationContext> entry = it.next();
+        ApplicationContextImpl potentialMatch = (ApplicationContextImpl) entry.getValue();
+        if (potentialMatch == app) {
+          it.remove();
+          appToRemove = potentialMatch;
+          break;
+        }
+    	}
     }
-        
+    
+    if (appToRemove != null) { 
+    	appToRemove.uninstall();
+    }
+
     LOGGER.debug(LOG_EXIT, "remove");
   }
   
-  public synchronized void close()
+  public void close()
   {
     LOGGER.debug(LOG_ENTRY, "close");
     
-    Iterator<AriesApplicationContext> it = _appToContextMap.values().iterator();
-    while (it.hasNext())
-    {      
-      try {
-        ApplicationContextImpl ctx = (ApplicationContextImpl)it.next();
-        ctx.uninstall();
-        it.remove();
-      } catch (BundleException e)
+    List<ApplicationContextImpl> contextsToUninstall = new ArrayList<ApplicationContextImpl>();
+    synchronized (_appToContextMap) { 
+    	Iterator<AriesApplicationContext> it = _appToContextMap.values().iterator();
+    	while (it.hasNext()) { 
+    		ApplicationContextImpl ctx = (ApplicationContextImpl)it.next();
+    		if (ctx.getApplicationState() != ApplicationState.UNINSTALLED) { 
+    			contextsToUninstall.add(ctx);
+    			it.remove();
+    		}
+    	}
+    }
+    for (ApplicationContextImpl c : contextsToUninstall) { 
+    	try { 
+    		c.uninstall();
+    	} catch (BundleException e)
       {
         LOGGER.debug(LOG_EXCEPTION,e);
       }
@@ -185,4 +201,41 @@ public class ApplicationContextManagerImpl implements AriesApplicationContextMan
     return ctx;
   }
 
+  public void bindBundleFrameworkManager(BundleFrameworkManager bfm)
+  {
+    LOGGER.debug(LOG_ENTRY, "bindBundleFrameworkManager", bfm);
+    
+    List<AriesApplicationContext> contexts = new ArrayList<AriesApplicationContext>();
+    synchronized (_appToContextMap) { 
+    	contexts.addAll (_appToContextMap.values());
+    }
+    
+    for (AriesApplicationContext ctx : contexts) { 
+    	try { 
+    		((ApplicationContextImpl)ctx).open();
+    	} catch (BundleException e) {
+        LOGGER.debug(LOG_EXCEPTION,e);
+      }
+    }
+    LOGGER.debug(LOG_EXIT, "bindBundleFrameworkManager");
+  }
+
+  public void unbindBundleFrameworkManager(BundleFrameworkManager bfm)
+  {
+    LOGGER.debug(LOG_ENTRY, "unbindBundleFrameworkManager", bfm);
+    
+    List<AriesApplicationContext> appContexts = new ArrayList<AriesApplicationContext>();
+    synchronized (_appToContextMap) { 
+    	appContexts.addAll(_appToContextMap.values());
+    }
+    for (AriesApplicationContext c : appContexts) { 
+    	try { 
+    		((ApplicationContextImpl)c).close();
+    	} catch (BundleException e) { 
+    		LOGGER.debug(LOG_EXCEPTION,e);
+    	}
+    }
+   
+    LOGGER.debug(LOG_EXIT, "unbindBundleFrameworkManager");
+  }
 }

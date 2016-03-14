@@ -1,27 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Licensed to the Apache Software Foundation (ASF) under one or more
-    contributor license agreements.  See the NOTICE file distributed with
-    this work for additional information regarding copyright ownership.
-    The ASF licenses this file to You under the Apache License, Version 2.0
-    (the "License"); you may not use this file except in compliance with
-    the License.  You may obtain a copy of the License at
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ Unless required by applicable law or agreed to in writing,
+ software distributed under the License is distributed on an
+ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ KIND, either express or implied.  See the License for the
+ specific language governing permissions and limitations
+ under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>org.apache.aries.jmx</groupId>
-        <artifactId>jmx</artifactId>
-        <version>0.4-SNAPSHOT</version>
-    </parent>
+        <artifactId>org.apache.aries.jmx.parent</artifactId>
+        <version>1.1.6-SNAPSHOT</version>
+        <relativePath>../jmx-parent</relativePath>
+    </parent>  
 
+    <groupId>org.apache.aries.jmx</groupId>
     <artifactId>org.apache.aries.jmx.whiteboard</artifactId>
     <packaging>bundle</packaging>
     <name>Apache Aries Whiteboard support for JMX DynamicMBean services</name>
@@ -31,13 +38,6 @@
         service is registered with (and unregistered from) all MBeanServer
         services registered in the OSGi service registry.
     </description>
-
-    <scm>
-        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/jmx/jmx-whiteboard</connection>
-        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/jmx/jmx-whiteboard</developerConnection>
-        <url>http://svn.apache.org/viewvc/aries/trunk/jmx/jmx-whiteboard</url>
-    </scm>
-
 
     <!-- A Note on Testing ================= This project contains two kinds 
         of tests: regular unit tests running in the test phase and integration tests 
@@ -64,14 +64,17 @@
             org.apache.aries.jmx.whiteboard.Activator
         </aries.osgi.activator>
         <aries.osgi.export.pkg>
-            !*
         </aries.osgi.export.pkg>
         <aries.osgi.private.pkg>
-            org.apache.aries.jmx.whiteboard
+            org.apache.aries.jmx.whiteboard,
+            org.apache.aries.jmx.util.shared
         </aries.osgi.private.pkg>
         <aries.osgi.import.service>
             javax.management.MBeanServer
         </aries.osgi.import.service>
+
+        <exam.version>3.4.0</exam.version>
+        <url.version>1.6.0</url.version>
     </properties>
 
     <build>
@@ -117,16 +120,26 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.apache.aries.jmx</groupId>
+            <artifactId>org.apache.aries.jmx.core</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- OSGi Libraries -->
         <dependency>
             <groupId>org.osgi</groupId>
             <artifactId>org.osgi.core</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.osgi</groupId>
             <artifactId>org.osgi.compendium</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Integration Testing with Pax Exam -->
@@ -138,22 +151,43 @@
         <dependency>
             <groupId>org.ops4j.pax.exam</groupId>
             <artifactId>pax-exam</artifactId>
+            <version>${exam.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.ops4j.pax.exam</groupId>
-            <artifactId>pax-exam-junit</artifactId>
+            <artifactId>pax-exam-junit4</artifactId>
+            <version>${exam.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.ops4j.pax.exam</groupId>
-            <artifactId>pax-exam-container-default</artifactId>
+            <artifactId>pax-exam-container-forked</artifactId>
+            <version>${exam.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.ops4j.pax.swissbox</groupId>
-            <artifactId>pax-swissbox-tinybundles</artifactId>
+            <groupId>org.ops4j.pax.exam</groupId>
+            <artifactId>pax-exam-link-mvn</artifactId>
+            <version>${exam.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.ops4j.pax.url</groupId>
+            <artifactId>pax-url-aether</artifactId>
+            <version>${url.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.ops4j.pax.tinybundles</groupId>
+            <artifactId>tinybundles</artifactId>
+            <version>2.0.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse</groupId>
+            <artifactId>org.eclipse.osgi</artifactId>
+            <version>3.8.0.v20120529-1548</version>
         </dependency>
     </dependencies>
 
@@ -176,11 +210,22 @@
                                 </goals>
                                 <configuration>
                                     <tasks>
-                                        <copy
-                                            file="${project.build.directory}/${project.build.finalName}.jar"
-                                            tofile="${project.build.directory}/jmx-whiteboard.jar" />
+                                        <copy file="${project.build.directory}/${project.build.finalName}.jar" tofile="${project.build.directory}/jmx-whiteboard.jar" />
                                     </tasks>
                                 </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.aries.versioning</groupId>
+                        <artifactId>org.apache.aries.versioning.plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default-verify</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>version-check</goal>
+                                </goals>
                             </execution>
                         </executions>
                     </plugin>
@@ -208,4 +253,5 @@
             </snapshots>
         </repository>
     </repositories>
+
 </project>

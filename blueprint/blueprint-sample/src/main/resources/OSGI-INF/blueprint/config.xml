@@ -16,7 +16,7 @@
 	-->
 <blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
 	xmlns:cm="http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.0.0"
-	xmlns:ext="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.0.0"
+	xmlns:ext="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.2.0"
 	default-availability="optional">
 
 	<type-converters>
@@ -30,9 +30,11 @@
 
 	<ext:property-placeholder placeholder-prefix="$["
 		placeholder-suffix="]" ignore-missing-locations="true"
-		system-properties="override">
+		system-properties="override" evaluator="jexl">
 		<ext:default-properties>
 			<ext:property name="name" value="value" />
+			<ext:property name="a" value="Hello " />
+			<ext:property name="b" value="FooBar" />
 		</ext:default-properties>
 		<ext:location>file:///url</ext:location>
 	</ext:property-placeholder>
@@ -82,8 +84,8 @@
 	</bean>
 
 	<bean id="bar" class="org.apache.aries.blueprint.sample.Bar">
-		<property name="value">
-			<value>Hello FooBar</value>
+		<property name="value" value="$[a+b]">
+			<!--value>Hello FooBar</value-->
 		</property>
 		<property name="context" ref="blueprintBundleContext" />
 		<property name="list">
@@ -92,6 +94,10 @@
 				<value type="java.lang.Integer">5</value>
 			</list>
 		</property>
+	</bean>
+	
+	<bean id="destroyCallingReference" class="org.apache.aries.blueprint.sample.DestroyTest" destroy-method="destroy">
+	  <property name="target" ref="refWithDefault"/>
 	</bean>
 
 	<service ref="foo" auto-export="all-classes">
@@ -110,6 +116,9 @@
 		<reference-listener bind-method="bind"
 			unbind-method="unbind" ref="bindingListener" />
 	</reference>
+	
+	<reference id="refWithDefault" interface="java.lang.Runnable" ext:default="defaultRunnable" timeout="100" availability="optional"/>
+	<bean id="defaultRunnable" class="org.apache.aries.blueprint.sample.DefaultRunnable"/>
 
 	<bean id="bindingListener" class="org.apache.aries.blueprint.sample.BindingListener" />
 

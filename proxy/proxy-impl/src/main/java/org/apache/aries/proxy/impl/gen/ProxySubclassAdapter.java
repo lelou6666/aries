@@ -19,11 +19,14 @@
 package org.apache.aries.proxy.impl.gen;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Modifier;
 
+import org.apache.aries.proxy.impl.NLS;
+import org.apache.aries.proxy.impl.ProxyUtils;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.Attribute;
-import org.objectweb.asm.ClassAdapter;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
@@ -35,11 +38,12 @@ import org.objectweb.asm.commons.Method;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
+public class ProxySubclassAdapter extends ClassVisitor implements Opcodes
 {
 
   private static final Type STRING_TYPE = Type.getType(String.class);
   private static final Type CLASS_TYPE = Type.getType(Class.class);
+  private static final Type CLASSLOADER_TYPE = Type.getType(ClassLoader.class);
   private static final Type OBJECT_TYPE = Type.getType(Object.class);
   private static final Type METHOD_TYPE = Type.getType(java.lang.reflect.Method.class);
   private static final Type IH_TYPE = Type.getType(InvocationHandler.class);
@@ -62,7 +66,7 @@ public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
   public ProxySubclassAdapter(ClassVisitor writer, String newClassName, ClassLoader loader)
   {
     // call the superclass constructor
-    super(writer);
+    super(Opcodes.ASM5, writer);
     // the writer is now the cv in the superclass of ClassAdapter
 
     LOGGER.debug(Constants.LOG_ENTRY, "ProxySubclassAdapter", new Object[] { this, writer,
@@ -108,13 +112,15 @@ public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
       throw new TypeNotPresentException(superclassBinaryName, cnfe);
     }
 
-    // move the existing class name to become the superclass
-    // modify the version of the dynamic subclass to be Java 1.6
-    int newVersion = Opcodes.V1_6;
-    // keep the same access and signature as the superclass
+
+    // keep the same access and signature as the superclass (unless it's abstract)
     // remove all the superclass interfaces because they will be inherited
     // from the superclass anyway
-    cv.visit(newVersion, access, newClassName, signature, name, null);
+    if((access & ACC_ABSTRACT) != 0) {
+      //If the super was abstract the subclass should not be!
+      access &= ~ACC_ABSTRACT;
+    }
+    cv.visit(ProxyUtils.getWeavingJavaVersion(), access, newClassName, signature, name, null);
 
     // add a private field for the invocation handler
     // this isn't static in case we have multiple instances of the same
@@ -126,33 +132,87 @@ public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
     staticAdapter = new GeneratorAdapter(ACC_STATIC,
         new Method("<clinit>", Type.VOID_TYPE, NO_ARGS), null, null, cv);
 
-    // add a constructor method that takes an invocation handler as an
-    // argument
-    Method m = new Method("<init>", Type.VOID_TYPE, new Type[] { IH_TYPE });
+    // add a zero args constructor method
+    Method m = new Method("<init>", Type.VOID_TYPE, NO_ARGS);
     GeneratorAdapter methodAdapter = new GeneratorAdapter(ACC_PUBLIC, m, null, null, cv);
     // loadthis
     methodAdapter.loadThis();
-    // if we have java.* as a supertype call that zero args constructor
-    if (superclassBinaryName.startsWith("java.") || superclassBinaryName.startsWith("javax.")) {
-      methodAdapter.invokeConstructor(Type.getType(superclassClass), new Method("<init>",
-          Type.VOID_TYPE, NO_ARGS));
+    // List the constructors in the superclass.
+    Constructor<?>[] constructors = superclassClass.getDeclaredConstructors();
+    // Check that we've got at least one constructor, and get the 1st one in the list.
+    if (constructors.length > 0) {
+      // We now need to construct the proxy class as though it is going to invoke the superclasses constructor.
+      // We do this because we can no longer call the java.lang.Object() zero arg constructor as the JVM now throws a VerifyError.
+      // So what we do is build up the calling of the superclasses constructor using nulls and default values. This means that the 
+      // class bytes can be verified by the JVM, and then in the ProxySubclassGenerator, we load the class without invoking the 
+      // constructor. 
+      Method constructor = Method.getMethod(constructors[0]);      
+      Type[] argTypes = constructor.getArgumentTypes();
+      if (argTypes.length == 0) {
+        methodAdapter.invokeConstructor(Type.getType(superclassClass), new Method("<init>", Type.VOID_TYPE, NO_ARGS));
+      } else {
+        for (Type type : argTypes) {
+          switch (type.getSort())
+          {
+            case Type.ARRAY:
+              // We need to process any array or multidimentional arrays.
+              String elementDesc = type.getElementType().getDescriptor();
+              String typeDesc = type.getDescriptor();
+              
+              // Iterate over the number of arrays and load 0 for each one. Keep a count of the number of 
+              // arrays as we will need to run different code fo multi dimentional arrays.
+              int index = 0;
+              while (! elementDesc.equals(typeDesc)) {
+                typeDesc = typeDesc.substring(1);
+                methodAdapter.visitInsn(Opcodes.ICONST_0);
+                index++;
+              }
+              // If we're just a single array, then call the newArray method, otherwise use the MultiANewArray instruction.
+              if (index == 1) {
+                methodAdapter.newArray(type.getElementType());
+              } else {
+                methodAdapter.visitMultiANewArrayInsn(type.getDescriptor(), index);
+              }
+              break;
+            case Type.BOOLEAN:
+              methodAdapter.push(true);
+              break;
+            case Type.BYTE:
+              methodAdapter.push(Type.VOID_TYPE);
+              break;
+            case Type.CHAR:
+              methodAdapter.push(Type.VOID_TYPE);
+              break;
+            case Type.DOUBLE:
+              methodAdapter.push(0.0);
+              break;
+            case Type.FLOAT:
+              methodAdapter.push(0.0f);
+              break;
+            case Type.INT:
+              methodAdapter.push(0);
+              break;
+            case Type.LONG:
+              methodAdapter.push(0l);
+              break;
+            case Type.SHORT:
+              methodAdapter.push(0);
+              break;
+            default:
+            case Type.OBJECT:
+              methodAdapter.visitInsn(Opcodes.ACONST_NULL);
+              break;
+          }
+        }
+        
+        methodAdapter.invokeConstructor(Type.getType(superclassClass), new Method("<init>", Type.VOID_TYPE, argTypes));
+      }
     }
-    // otherwise invoke the java.lang.Object no args constructor
-    else {
-      methodAdapter.invokeConstructor(OBJECT_TYPE, new Method("<init>", Type.VOID_TYPE, NO_ARGS));
-    }
-    // call from the constructor to setInvocationHandler
-    Method setter = new Method("setInvocationHandler", Type.VOID_TYPE, new Type[] { IH_TYPE });
-    // load this
-    methodAdapter.loadThis();
-    // load the supplied invocation handler arg
-    methodAdapter.loadArgs();
-    // invoke the setter method
-    methodAdapter.invokeVirtual(newClassType, setter);
     methodAdapter.returnValue();
     methodAdapter.endMethod();
 
     // add a method for getting the invocation handler
+    Method setter = new Method("setInvocationHandler", Type.VOID_TYPE, new Type[] { IH_TYPE });
     m = new Method("getInvocationHandler", IH_TYPE, NO_ARGS);
     methodAdapter = new GeneratorAdapter(ACC_PUBLIC | ACC_FINAL, m, null, null, cv);
     // load this to get the field
@@ -210,6 +270,10 @@ public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
         // read the current class and use a
         // ProxySubclassHierarchyAdapter
         // to process only methods on that class that are in the list
+        ClassLoader loader = currentlyAnalysedClass.getClassLoader();
+        if (loader == null) {
+          loader = this.loader;
+        }
         ClassReader cr = new ClassReader(loader.getResourceAsStream(currentlyAnalysedClass
             .getName().replaceAll("\\.", "/")
             + ".class"));
@@ -279,11 +343,16 @@ public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
      * Check the method access and handle the method types we don't want to
      * copy: final methods (issue warnings if these are not methods from
      * java.* classes) static methods (initialiser and others) private
-     * methods constructors (for now we don't copy any constructors)
-     * abstract (we don't proxy/implement but we must copy the method or the
-     * subclass is invalid) everything else we process to proxy
+     * methods, constructors (for now we don't copy any constructors)
+     * everything else we process to proxy. Abstract methods should be made
+     * non-abstract so that they can be proxied.
      */
-
+    
+    if((access & ACC_ABSTRACT) != 0) {
+      //If the method is abstract then it should not be in the concrete subclass!
+      access &= ~ACC_ABSTRACT;
+    }
+    
     LOGGER.debug("Method name: {} with descriptor: {}", name, desc);
 
     MethodVisitor methodVisitorToReturn = null;
@@ -316,10 +385,6 @@ public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
     } else if ((access & ACC_STATIC) != 0) {
       // don't copy static methods
       methodVisitorToReturn = null;
-    } else if ((access & ACC_ABSTRACT) != 0) {
-      // if we find an abstract method we need to copy it as is to make
-      // the subclass valid
-      methodVisitorToReturn = cv.visitMethod(access, name, desc, signature, exceptions);
     } else if (!(((access & ACC_PUBLIC) != 0) || ((access & ACC_PROTECTED) != 0) || ((access & ACC_PRIVATE) != 0))) {
       // the default (package) modifier value is 0, so by using & with any
       // of the other
@@ -557,7 +622,7 @@ public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
      * 
      * produces bytecode for retrieving the superclass and storing in a
      * private static field: private static Class superClass = null; static{
-     * superClass = Class.forName(superclass); }
+     * superClass = Class.forName(superclass, true, TYPE_BEING_PROXIED.class.getClassLoader()); }
      */
 
     // add a private static field for the superclass Class
@@ -566,10 +631,15 @@ public class ProxySubclassAdapter extends ClassAdapter implements Opcodes
 
     // push the String arg for the Class.forName onto the stack
     staticAdapter.push(classBinaryName);
+    //push the boolean arg for the Class.forName onto the stack
+    staticAdapter.push(true);
+    //get the classloader
+    staticAdapter.push(newClassType);
+    staticAdapter.invokeVirtual(CLASS_TYPE, new Method("getClassLoader", CLASSLOADER_TYPE, NO_ARGS));
 
     // invoke the Class forName putting the Class on the stack
     staticAdapter.invokeStatic(CLASS_TYPE, new Method("forName", CLASS_TYPE,
-        new Type[] { STRING_TYPE }));
+        new Type[] { STRING_TYPE, Type.BOOLEAN_TYPE, CLASSLOADER_TYPE }));
 
     // put the Class in the static field
     staticAdapter.putStatic(newClassType, currentClassFieldName, CLASS_TYPE);

@@ -43,9 +43,9 @@ import org.apache.aries.application.management.AriesApplicationContext;
 import org.apache.aries.application.management.BundleInfo;
 import org.apache.aries.application.management.UpdateException;
 import org.apache.aries.application.management.spi.framework.BundleFrameworkManager;
+import org.apache.aries.application.management.spi.repository.BundleRepository.BundleSuggestion;
 import org.apache.aries.application.management.spi.repository.BundleRepositoryManager;
 import org.apache.aries.application.management.spi.repository.ContextException;
-import org.apache.aries.application.management.spi.repository.BundleRepository.BundleSuggestion;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleException;
 import org.slf4j.Logger;
@@ -58,6 +58,7 @@ public class ApplicationContextImpl implements AriesApplicationContext
   private final AriesApplication _application;
   private final Set<Bundle> _bundles;
   private ApplicationState _state = ApplicationState.UNINSTALLED;
+  private boolean _closed;
   private final BundleRepositoryManager _bundleRepositoryManager;
   private final BundleFrameworkManager _bundleFrameworkManager;
 
@@ -77,9 +78,10 @@ public class ApplicationContextImpl implements AriesApplicationContext
     _deploymentMF = _application.getDeploymentMetadata();
 
     if (_deploymentMF.getApplicationDeploymentContents() != null
-        && !_deploymentMF.getApplicationDeploymentContents().isEmpty())
+        && !_deploymentMF.getApplicationDeploymentContents().isEmpty()) {
       install();
-
+    }
+    
     LOGGER.debug(LOG_EXIT, "ApplicationContextImpl", this);
   }
 
@@ -131,29 +133,36 @@ public class ApplicationContextImpl implements AriesApplicationContext
   {
     LOGGER.debug(LOG_ENTRY, "uninstall");
     
-    // Iterate through all of the bundles that were started when this application was started, 
-    // and attempt to stop and uninstall each of them. 
-    for (Iterator<Bundle> bundleIter = _bundles.iterator(); bundleIter.hasNext();) {
-      Bundle bundleToRemove = bundleIter.next();
-
-      try {
-        // If Bundle is active, stop it first.
-        if (bundleToRemove.getState() == Bundle.ACTIVE) {
-          _bundleFrameworkManager.stopBundle(bundleToRemove);
-        }
-
-        // Delegate the uninstall to the bundleFrameworkManager
-        _bundleFrameworkManager.uninstallBundle(bundleToRemove);
-
-      } catch (BundleException be) {
-        LOGGER.debug(LOG_EXCEPTION, be);
-        throw be;
-      }
-    }
-    _bundles.clear();
+    if (_state != ApplicationState.UNINSTALLED) {
+      // Iterate through all of the bundles that were started when this application was started, 
+      // and attempt to stop and uninstall each of them. 
+      for (Iterator<Bundle> bundleIter = _bundles.iterator(); bundleIter.hasNext();) {
+        Bundle bundleToRemove = bundleIter.next();
+  
+        if (bundleToRemove.getState() != Bundle.UNINSTALLED) {
+          try {
+            // If Bundle is active, stop it first.
+            if (bundleToRemove.getState() == Bundle.ACTIVE) {
+              _bundleFrameworkManager.stopBundle(bundleToRemove);
+            }
+          } catch (BundleException be) {
+            LOGGER.debug(LOG_EXCEPTION, be);
+          }
+  
+          try {
+            // Delegate the uninstall to the bundleFrameworkManager
+            _bundleFrameworkManager.uninstallBundle(bundleToRemove);
     
-    _state = ApplicationState.UNINSTALLED;
-
+          } catch (BundleException be) {
+            LOGGER.debug(LOG_EXCEPTION, be);
+          }
+        }
+        bundleIter.remove();
+      }
+      
+      _state = ApplicationState.UNINSTALLED;
+    }
+    
     LOGGER.debug(LOG_EXIT, "uninstall");
 
   }
@@ -412,6 +421,20 @@ public class ApplicationContextImpl implements AriesApplicationContext
               false, e2);
         } 
       }
+    }
+  }
+
+  public synchronized void close() throws BundleException
+  {
+    uninstall();
+    _closed = true;
+  }
+  
+  public synchronized void open() throws BundleException
+  {
+    if (_closed) {
+      install();
+      _closed = false;
     }
   }
 }

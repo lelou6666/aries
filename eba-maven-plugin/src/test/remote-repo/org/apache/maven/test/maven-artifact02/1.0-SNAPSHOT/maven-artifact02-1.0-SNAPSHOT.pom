@@ -22,4 +22,15 @@
   <groupId>org.apache.maven.test</groupId>
   <artifactId>maven-artifact02</artifactId>
   <version>1.0-SNAPSHOT</version>
+
+  <!-- define a transitive dependency on artifact03 -->
+  <dependencies>
+      <dependency>
+          <groupId>org.apache.maven.test</groupId>
+          <artifactId>maven-artifact03</artifactId>
+	  <version>1.0-SNAPSHOT</version>
+      </dependency>
+  </dependencies>
+
+
 </project>

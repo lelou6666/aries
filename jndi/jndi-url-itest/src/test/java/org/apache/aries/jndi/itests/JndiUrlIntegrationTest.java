@@ -21,23 +21,38 @@ package org.apache.aries.jndi.itests;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.ops4j.pax.exam.CoreOptions.equinox;
-import static org.ops4j.pax.exam.CoreOptions.options;
+import static org.ops4j.pax.exam.CoreOptions.composite;
+import static org.ops4j.pax.exam.CoreOptions.junitBundles;
+import static org.ops4j.pax.exam.CoreOptions.mavenBundle;
 import static org.ops4j.pax.exam.CoreOptions.systemProperty;
-import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.vmOption;
+import static org.ops4j.pax.exam.CoreOptions.vmOption;
+import static org.ops4j.pax.exam.CoreOptions.when;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URL;
 
+import org.apache.aries.itest.AbstractIntegrationTest;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.ops4j.pax.exam.Configuration;
+import org.ops4j.pax.exam.CoreOptions;
 import org.ops4j.pax.exam.Option;
-import org.ops4j.pax.exam.junit.JUnit4TestRunner;
+import org.ops4j.pax.exam.junit.PaxExam;
+import org.ops4j.pax.exam.spi.reactors.ExamReactorStrategy;
+import org.ops4j.pax.exam.spi.reactors.PerClass;
 import org.osgi.framework.Bundle;
 
-@RunWith(JUnit4TestRunner.class)
+@RunWith(PaxExam.class)
+@ExamReactorStrategy(PerClass.class)
 public class JndiUrlIntegrationTest extends AbstractIntegrationTest {
 
+  private static final int CONNECTION_TIMEOUT = 10000;
+  
+
+    
   /**
    * This test exercises the blueprint:comp/ jndi namespace by driving
    * a Servlet which then looks up some blueprint components from its own
@@ -48,12 +63,12 @@ public class JndiUrlIntegrationTest extends AbstractIntegrationTest {
   @Test
   public void testBlueprintCompNamespaceWorks() throws Exception { 
 
-    Bundle bBiz = getInstalledBundle("org.apache.aries.jndi.url.itest.biz");
+    Bundle bBiz = context().getBundleByName("org.apache.aries.jndi.url.itest.biz");
     assertNotNull(bBiz);
     
-    Bundle bweb = getInstalledBundle("org.apache.aries.jndi.url.itest.web");
+    Bundle bweb = context().getBundleByName("org.apache.aries.jndi.url.itest.web");
     assertNotNull(bweb);
-    
+    context().getBundleByName("org.ops4j.pax.web.pax-web-extender-war").start();
     printBundleStatus ("Before making web request");
     try { 
       Thread.sleep(5000);
@@ -67,7 +82,7 @@ public class JndiUrlIntegrationTest extends AbstractIntegrationTest {
   
   private void printBundleStatus (String msg) { 
     System.out.println("-----\nprintBundleStatus: " + msg + "\n-----");
-    for (Bundle b : bundleContext.getBundles()) { 
+    for (Bundle b : bundleContext.getBundles()) {
       System.out.println (b.getSymbolicName() + " " + "state=" + formatState(b.getState()));
     }
     System.out.println();
@@ -95,47 +110,76 @@ public class JndiUrlIntegrationTest extends AbstractIntegrationTest {
     return response;
   }
   
-  @org.ops4j.pax.exam.junit.Configuration
-  public static Option[] configuration()
+  private static HttpURLConnection makeConnection(String contextPath) throws IOException
   {
-    Option[] options = options(
-        vmOption("-Dorg.osgi.framework.system.packages=javax.accessibility,javax.activation,javax.activity,javax.annotation,javax.annotation.processing,javax.crypto,javax.crypto.interfaces,javax.crypto.spec,javax.imageio,javax.imageio.event,javax.imageio.metadata,javax.imageio.plugins.bmp,javax.imageio.plugins.jpeg,javax.imageio.spi,javax.imageio.stream,javax.jws,javax.jws.soap,javax.lang.model,javax.lang.model.element,javax.lang.model.type,javax.lang.model.util,javax.management,javax.management.loading,javax.management.modelmbean,javax.management.monitor,javax.management.openmbean,javax.management.relation,javax.management.remote,javax.management.remote.rmi,javax.management.timer,javax.naming,javax.naming.directory,javax.naming.event,javax.naming.ldap,javax.naming.spi,javax.net,javax.net.ssl,javax.print,javax.print.attribute,javax.print.attribute.standard,javax.print.event,javax.rmi,javax.rmi.CORBA,javax.rmi.ssl,javax.script,javax.security.auth,javax.security.auth.callback,javax.security.auth.kerberos,javax.security.auth.login,javax.security.auth.spi,javax.security.auth.x500,javax.security.cert,javax.security.sasl,javax.sound.midi,javax.sound.midi.spi,javax.sound.sampled,javax.sound.sampled.spi,javax.sql,javax.sql.rowset,javax.sql.rowset.serial,javax.sql.rowset.spi,javax.swing,javax.swing.border,javax.swing.colorchooser,javax.swing.event,javax.swing.filechooser,javax.swing.plaf,javax.swing.plaf.basic,javax.swing.plaf.metal,javax.swing.plaf.multi,javax.swing.plaf.synth,javax.swing.table,javax.swing.text,javax.swing.text.html,javax.swing.text.html.parser,javax.swing.text.rtf,javax.swing.tree,javax.swing.undo,javax.tools,javax.xml,javax.xml.bind,javax.xml.bind.annotation,javax.xml.bind.annotation.adapters,javax.xml.bind.attachment,javax.xml.bind.helpers,javax.xml.bind.util,javax.xml.crypto,javax.xml.crypto.dom,javax.xml.crypto.dsig,javax.xml.crypto.dsig.dom,javax.xml.crypto.dsig.keyinfo,javax.xml.crypto.dsig.spec,javax.xml.datatype,javax.xml.namespace,javax.xml.parsers,javax.xml.soap,javax.xml.stream,javax.xml.stream.events,javax.xml.stream.util,javax.xml.transform,javax.xml.transform.dom,javax.xml.transform.sax,javax.xml.transform.stax,javax.xml.transform.stream,javax.xml.validation,javax.xml.ws,javax.xml.ws.handler,javax.xml.ws.handler.soap,javax.xml.ws.http,javax.xml.ws.soap,javax.xml.ws.spi,javax.xml.xpath,org.ietf.jgss,org.omg.CORBA,org.omg.CORBA.DynAnyPackage,org.omg.CORBA.ORBPackage,org.omg.CORBA.TypeCodePackage,org.omg.CORBA.portable,org.omg.CORBA_2_3,org.omg.CORBA_2_3.portable,org.omg.CosNaming,org.omg.CosNaming.NamingContextExtPackage,org.omg.CosNaming.NamingContextPackage,org.omg.Dynamic,org.omg.DynamicAny,org.omg.DynamicAny.DynAnyFactoryPackage,org.omg.DynamicAny.DynAnyPackage,org.omg.IOP,org.omg.IOP.CodecFactoryPackage,org.omg.IOP.CodecPackage,org.omg.Messaging,org.omg.PortableInterceptor,org.omg.PortableInterceptor.ORBInitInfoPackage,org.omg.PortableServer,org.omg.PortableServer.CurrentPackage,org.omg.PortableServer.POAManagerPackage,org.omg.PortableServer.POAPackage,org.omg.PortableServer.ServantLocatorPackage,org.omg.PortableServer.portable,org.omg.SendingContext,org.omg.stub.java.rmi,org.w3c.dom,org.w3c.dom.bootstrap,org.w3c.dom.css,org.w3c.dom.events,org.w3c.dom.html,org.w3c.dom.ls,org.w3c.dom.ranges,org.w3c.dom.stylesheets,org.w3c.dom.traversal,org.w3c.dom.views,org.xml.sax,org.xml.sax.ext,org.xml.sax.helpers,javax.transaction;partial=true;mandatory:=partial,javax.transaction.xa;partial=true;mandatory:=partial"),
-        // Log
-        mavenBundle("org.ops4j.pax.logging", "pax-logging-api"),
-        mavenBundle("org.ops4j.pax.logging", "pax-logging-service"),
-        // Felix mvn url handler - do we need this?
-        mavenBundle("org.ops4j.pax.url", "pax-url-mvn"),
+    URL url = new URL(contextPath);
+    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
-        systemProperty("org.ops4j.pax.logging.DefaultServiceLog.level").value("DEBUG"),
+    conn.setConnectTimeout(CONNECTION_TIMEOUT);
+    conn.connect();
 
+    return conn;
+  }
+  
+  private static String getHTTPResponse(HttpURLConnection conn) throws IOException
+  {
+    StringBuilder response = new StringBuilder();
+    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "ISO-8859-1"));
+    try {
+      for (String s = reader.readLine(); s != null; s = reader.readLine()) {
+        response.append(s).append("\r\n");
+      }
+    } finally {
+      reader.close();
+    }
+
+    return response.toString();
+  }
+  
+  public Option baseOptions() {
+      String localRepo = System.getProperty("maven.repo.local");
+      if (localRepo == null) {
+          localRepo = System.getProperty("org.ops4j.pax.url.mvn.localRepository");
+      }
+      return composite(
+              junitBundles(),
+              // this is how you set the default log level when using pax
+              // logging (logProfile)
+              systemProperty("org.ops4j.pax.logging.DefaultServiceLog.level").value("INFO"),
+              when(localRepo != null).useOptions(vmOption("-Dorg.ops4j.pax.url.mvn.localRepository=" + localRepo))
+       );
+  }
+  
+  @Configuration
+  public Option[] configuration()
+  {
+    return CoreOptions.options(
+    	baseOptions(),
+        
         // Bundles
-        mavenBundle("org.eclipse.equinox", "cm"),
-        mavenBundle("org.eclipse.osgi", "services"),
-        mavenBundle("org.apache.geronimo.specs", "geronimo-servlet_2.5_spec"),
+        mavenBundle("org.eclipse.equinox", "cm").versionAsInProject(),
+        mavenBundle("org.eclipse.osgi", "services").versionAsInProject(),
+        mavenBundle("org.apache.geronimo.specs", "geronimo-servlet_2.5_spec").versionAsInProject(),
 
-        mavenBundle("org.ops4j.pax.web", "pax-web-extender-war"),
-        mavenBundle("org.ops4j.pax.web", "pax-web-jetty-bundle"),
+        mavenBundle("org.ops4j.pax.web", "pax-web-extender-war").versionAsInProject(),
+        mavenBundle("org.ops4j.pax.web", "pax-web-jetty-bundle").versionAsInProject(),
         
-        mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint"),
-        mavenBundle("org.apache.aries.proxy", "org.apache.aries.proxy"),
-        mavenBundle("org.apache.aries", "org.apache.aries.util"),
-        mavenBundle("org.apache.aries.jndi", "org.apache.aries.jndi"),
-        mavenBundle("org.apache.aries.jndi", "org.apache.aries.jndi.url"),
-      
-        mavenBundle("org.apache.aries.jndi", "org.apache.aries.jndi.url.itest.web"),
-        mavenBundle("org.apache.aries.jndi", "org.apache.aries.jndi.url.itest.biz"),
-        mavenBundle("asm", "asm-all"),
+        mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.api").versionAsInProject(),
+        mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.core").versionAsInProject(),
+        mavenBundle("org.apache.aries.proxy", "org.apache.aries.proxy").versionAsInProject(),
+        mavenBundle("org.apache.aries", "org.apache.aries.util").versionAsInProject(),
+        mavenBundle("org.apache.aries.jndi", "org.apache.aries.jndi").versionAsInProject(),
         
-        /* For debugging, uncomment the next two lines */
-        // vmOption("-Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=7777"),
-        // waitForFrameworkStartup(),
-        /*
-         * For debugging, add these imports: 
-         * import static org.ops4j.pax.exam.CoreOptions.waitForFrameworkStartup; 
-         * import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.vmOption;
-         */
-        equinox().version("3.5.0"));
-    options = updateOptions(options);
-    return options;
+        mavenBundle("org.apache.aries.jndi", "org.apache.aries.jndi.url.itest.web").versionAsInProject(),
+        mavenBundle("org.apache.aries.jndi", "org.apache.aries.jndi.url.itest.biz").versionAsInProject(),
+        mavenBundle("org.ow2.asm", "asm-debug-all").versionAsInProject(),
+        mavenBundle("org.apache.aries.testsupport", "org.apache.aries.testsupport.unit").versionAsInProject(),
+
+        mavenBundle("org.ops4j.pax.logging", "pax-logging-api").versionAsInProject(),
+        mavenBundle("org.ops4j.pax.logging", "pax-logging-service").versionAsInProject()
+        );
+
+        // org.ops4j.pax.exam.container.def.PaxRunnerOptions.vmOption("-Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=7777"),
+        // org.ops4j.pax.exam.CoreOptions.waitForFrameworkStartup(),
   }
 }

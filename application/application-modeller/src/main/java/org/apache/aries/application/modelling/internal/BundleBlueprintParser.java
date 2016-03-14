@@ -17,12 +17,18 @@
  * under the License.
  */
 package org.apache.aries.application.modelling.internal;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Pattern;
 
-import org.apache.aries.application.utils.manifest.BundleManifest;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
+import org.apache.aries.util.manifest.BundleManifest;
+import org.apache.aries.util.manifest.ManifestHeaderProcessor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static org.apache.aries.application.utils.AppConstants.*;
 
 /**
  * A bundle may contain a Bundle-Blueprint: header as per p649 of the v4 spec. If present, 
@@ -36,6 +42,7 @@ import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
 public class BundleBlueprintParser {
   
   public static final String DEFAULT_HEADER = "OSGI-INF/blueprint/*.xml";
+  private static final Logger logger = LoggerFactory.getLogger(BundleBlueprintParser.class);
   
   String _mfHeader = null;
   List<Path> _paths;
@@ -81,7 +88,7 @@ public class BundleBlueprintParser {
    * @param bundleMf BundleManifest to construct the parser from
    */
   public BundleBlueprintParser (BundleManifest bundleMf) {
-    String bundleBPHeader = (String) bundleMf.getRawAttributes().getValue("Bundle-Blueprint");
+    String bundleBPHeader = bundleMf.getRawAttributes().getValue("Bundle-Blueprint");
     setup (bundleBPHeader);
   }
 
@@ -100,13 +107,39 @@ public class BundleBlueprintParser {
     setup(null);
   }
   
+  static final boolean _blueprintHeaderMandatory;
+  static 
+  { 
+	  String blueprintHeaderMandatory = AccessController.doPrivileged(new PrivilegedAction<String>() 
+	  {
+		  public String run()
+	      {
+	        return System.getProperty("org.apache.aries.blueprint.header.mandatory", "false");
+	      }
+	  });
+	  _blueprintHeaderMandatory = blueprintHeaderMandatory.toLowerCase().equals("true");
+  }
+  
+  /**
+   * @return true if this bundle might contain blueprint files
+   */
+  public boolean mightContainBlueprint() {
+	  return _mfHeader != null && _mfHeader.trim().length() > 0;
+  }
+  
   private void setup (String bundleBPHeader) { 
     _paths = new LinkedList <Path>();
     if (bundleBPHeader == null) { 
-      _mfHeader = DEFAULT_HEADER;
+    	if (_blueprintHeaderMandatory) { 
+    		_mfHeader = null;
+    	} else { 
+    		_mfHeader = DEFAULT_HEADER;	
+    	}
     } else { 
       _mfHeader = bundleBPHeader;
     }
+    
+    logger.debug("Bundle-Blueprint header: {}", _mfHeader);
     
     // Break this comma separated list up
     List<String> files = ManifestHeaderProcessor.split(_mfHeader, ",");
@@ -150,12 +183,18 @@ public class BundleBlueprintParser {
    *  @return true if this is a blueprint file according to the Bundle-Blueprint header
    */
   public boolean isBPFile (String directory, String filename) { 
+    logger.debug(LOG_ENTRY, "isBPFile", new Object[] {directory, filename});
+      
+    boolean result=false;
     for (Path path: _paths) { 
       if (path.matches(directory, filename)) { 
-        return true;
+        result = true;
+        break;
       }
     }
-    return false;
+    
+    logger.debug(LOG_EXIT, "isBPFile", result);
+    return result;
   }
        
 }

@@ -20,12 +20,15 @@ package org.apache.aries.transaction;
 
 import javax.transaction.Transaction;
 
-class TransactionToken
+import org.osgi.service.coordinator.Coordination;
+
+public class TransactionToken
 {
    private Transaction activeTransaction;
    private Transaction suspendedTransaction;
    private TransactionAttribute transactionAttribute;
    private boolean isCompletionAllowed;
+   private Coordination coordination;
    
    public TransactionToken(Transaction activeTransaction, Transaction suspendedTransaction,
            TransactionAttribute transactionAttribute)
@@ -44,10 +47,6 @@ class TransactionToken
 
    public Transaction getActiveTransaction() {
        return activeTransaction;
-   }
-
-   public void setActiveTransaction(Transaction activeTransaction) {
-       this.activeTransaction = activeTransaction;
    }
 
    public Transaction getSuspendedTransaction() {
@@ -69,8 +68,12 @@ class TransactionToken
    public boolean isCompletionAllowed() {
        return isCompletionAllowed;
    }
-
-   public void setCompletionAllowed(boolean isCompletionAllowed) {
-       this.isCompletionAllowed = isCompletionAllowed;
+   
+   public Coordination getCoordination() {
+    return coordination;
+   }
+   
+   public void setCoordination(Coordination coordination) {
+    this.coordination = coordination;
    }
 }

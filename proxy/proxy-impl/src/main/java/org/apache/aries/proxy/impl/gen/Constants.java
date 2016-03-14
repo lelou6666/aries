@@ -18,6 +18,7 @@
  */
 package org.apache.aries.proxy.impl.gen;
 
+
 public interface Constants 
 {
   final static String LOG_ENTRY = "Method entry: {}, args {}";

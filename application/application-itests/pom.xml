@@ -18,52 +18,51 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-    <parent>
-        <artifactId>application</artifactId>
-        <groupId>org.apache.aries.application</groupId>
-        <version>0.4-SNAPSHOT</version>
-    </parent>
-    
+
     <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../../parent/pom.xml</relativePath>
+    </parent>
+
+    <groupId>org.apache.aries.application</groupId>
     <artifactId>org.apache.aries.application.runtime.isolated.itests</artifactId>
     <packaging>jar</packaging>
     <name>Apache Aries Application integration tests</name>
+    <version>1.0.1-SNAPSHOT</version>
     <description>
         Integration tests for the Application runtime
     </description>
     
+    <scm>
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/application/application-itests</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/application/application-itests</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/application/application-itests</url>
+    </scm>
+
+    <properties>
+        <exam.version>4.5.0</exam.version>
+        <url.version>2.2.0</url.version>
+    </properties>
+
     <dependencies>
+        <!-- framework -->
         <dependency>
             <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.core</artifactId>
+            <artifactId>org.osgi.compendium</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse</groupId>
+            <artifactId>org.eclipse.osgi</artifactId>
+            <version>3.8.0.v20120529-1548</version>
             <scope>test</scope>
         </dependency>
 
-		<dependency>
-			<groupId>org.apache.felix</groupId>
-			<artifactId>org.apache.felix.configadmin</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.aries</groupId>
-			<artifactId>org.apache.aries.util</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.aries.blueprint</groupId>
-			<artifactId>org.apache.aries.blueprint</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.aries.proxy</groupId>
-			<artifactId>org.apache.aries.proxy</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>asm</groupId>
-			<artifactId>asm-all</artifactId>
-			<scope>test</scope>
-		</dependency>
+        <!-- logging -->
 		<dependency>
 			<groupId>org.ops4j.pax.logging</groupId>
 			<artifactId>pax-logging-api</artifactId>
@@ -74,134 +73,166 @@
 			<artifactId>pax-logging-service</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+        <!-- pax exam -->
 		<dependency>
 			<groupId>org.ops4j.pax.exam</groupId>
 			<artifactId>pax-exam</artifactId>
+            <version>${exam.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.ops4j.pax.exam</groupId>
-			<artifactId>pax-exam-junit</artifactId>
+			<artifactId>pax-exam-junit4</artifactId>
+            <version>${exam.version}</version>
 			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.ops4j.pax.exam</groupId>
-			<artifactId>pax-exam-container-default</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.ops4j.pax.url</groupId>
-			<artifactId>pax-url-mvn</artifactId>
-            <scope>test</scope>
 		</dependency>
         <dependency>
-            <groupId>org.apache.felix</groupId>
-            <artifactId>org.apache.felix.bundlerepository</artifactId>
+            <groupId>org.ops4j.pax.exam</groupId>
+            <artifactId>pax-exam-container-native</artifactId>
+            <version>${exam.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.compendium</artifactId>
-            <scope>test</scope>
-        </dependency>       
-        <dependency>
-            <groupId>org.apache.aries.application</groupId>
-            <artifactId>org.apache.aries.application.utils</artifactId>
+            <groupId>org.ops4j.pax.exam</groupId>
+            <artifactId>pax-exam-link-mvn</artifactId>
+            <version>${exam.version}</version>
             <scope>test</scope>
         </dependency>
-        
+        <dependency>
+            <groupId>org.ops4j.pax.url</groupId>
+            <artifactId>pax-url-aether</artifactId>
+            <version>${url.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.aries.testsupport</groupId>
             <artifactId>org.apache.aries.testsupport.unit</artifactId>
+            <version>2.0.0-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
 
+        <!-- bundles -->
+        <dependency>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.apache.felix.configadmin</artifactId>
+            <version>1.2.4</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.felix</groupId>
+                    <artifactId>org.osgi.compendium</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.felix</groupId>
+                    <artifactId>org.osgi.core</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.apache.felix.bundlerepository</artifactId>
+            <version>1.6.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries</groupId>
+            <artifactId>org.apache.aries.util</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries.blueprint</groupId>
+            <artifactId>org.apache.aries.blueprint</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries.proxy</groupId>
+            <artifactId>org.apache.aries.proxy</artifactId>
+            <version>1.0.2-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-all</artifactId>
+            <version>5.0.3</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries.application</groupId>
+            <artifactId>org.apache.aries.application.utils</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.aries.application</groupId>
             <artifactId>org.apache.aries.application.runtime.itest.interfaces</artifactId>
-            <scope>test</scope>
-        </dependency>
-        
-        <dependency>
-            <groupId>org.apache.aries.application.itest.twitter</groupId>
-            <artifactId>org.apache.aries.application.itest.twitter.eba</artifactId>
-            <version>${project.version}</version>
-            <type>eba</type>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.aries.application</groupId>
-            <artifactId>twitter4j</artifactId>
-            <version>2.0.8</version>
-            
+            <version>1.0.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.aries.application</groupId>
             <artifactId>org.apache.aries.application.management</artifactId>
+            <version>1.0.0</version>
             <scope>test</scope>
         </dependency>
-        
         <dependency>
         	<groupId>org.apache.aries.application</groupId>
         	<artifactId>org.apache.aries.application.runtime.framework</artifactId>
+            <version>1.0.0</version>
         	<scope>test</scope>
         </dependency>
-        
         <dependency>
         	<groupId>org.apache.aries.application</groupId>
         	<artifactId>org.apache.aries.application.runtime.framework.management</artifactId>
+            <version>1.0.0</version>
         	<scope>test</scope>
         </dependency>
-        
         <dependency>
         	<groupId>org.apache.aries.application</groupId>
         	<artifactId>org.apache.aries.application.runtime.repository</artifactId>
+            <version>1.0.0</version>
         	<scope>test</scope>
         </dependency>
-        
         <dependency>
         	<groupId>org.apache.aries.application</groupId>
         	<artifactId>org.apache.aries.application.runtime.isolated</artifactId>
+            <version>1.0.0</version>
         	<scope>test</scope>
         </dependency>
-        
         <dependency>
         	<groupId>org.apache.aries.application</groupId>
         	<artifactId>org.apache.aries.application.runtime</artifactId>
+            <version>1.0.0</version>
         	<scope>test</scope>
         </dependency>
-        
         <dependency>
             <groupId>org.apache.aries.application</groupId>
             <artifactId>org.apache.aries.application.resolver.obr</artifactId>
+            <version>1.0.0</version>
             <scope>test</scope>
         </dependency>
-       
         <dependency>
             <groupId>org.apache.aries.application</groupId>
             <artifactId>org.apache.aries.application.resolver.noop</artifactId>
+            <version>1.0.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.apache.aries.application</groupId>
-            <artifactId>org.apache.aries.application.noop.platform.repo</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.aries.application</groupId>
-            <artifactId>org.apache.aries.application.noop.postresolve.process</artifactId>
-            <scope>test</scope>
-        </dependency>
+		    <groupId>org.apache.aries.application</groupId>
+		    <artifactId>org.apache.aries.application.resolve.transform.cm</artifactId>
+		    <version>1.0.0</version>
+       	</dependency>
         <dependency>
              <groupId>org.apache.aries.application</groupId>
              <artifactId>org.apache.aries.application.default.local.platform</artifactId>
+            <version>1.0.0</version>
              <scope>test</scope>
         </dependency>
         <dependency>
         	<groupId>org.apache.aries.transaction</groupId>
         	<artifactId>org.apache.aries.transaction.blueprint</artifactId>
+            <version>1.0.0</version>
         	<scope>test</scope>
         </dependency>
         <dependency>
@@ -210,21 +241,14 @@
         	<version>1.1.1</version>
         	<scope>test</scope>
         </dependency>
-        <dependency>
-        	<groupId>org.eclipse</groupId>
-        	<artifactId>osgi</artifactId>
-        	<version>3.5.0.v20090520</version>
-        	<type>jar</type>
-        	<scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <plugin>
+        	<plugin>
                 <groupId>org.apache.servicemix.tooling</groupId>
                 <artifactId>depends-maven-plugin</artifactId>
-                <version>1.2</version>
+                <version>1.3</version>
                 <executions>
                     <execution>
                         <id>generate-depends-file</id>
@@ -280,4 +304,5 @@
             </build>
         </profile>
     </profiles>
+
 </project>

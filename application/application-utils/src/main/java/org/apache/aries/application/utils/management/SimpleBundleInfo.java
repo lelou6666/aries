@@ -30,8 +30,8 @@ import java.util.jar.Attributes;
 import org.apache.aries.application.Content;
 import org.apache.aries.application.impl.ContentImpl;
 import org.apache.aries.application.management.BundleInfo;
-import org.apache.aries.application.utils.manifest.BundleManifest;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
+import org.apache.aries.util.manifest.BundleManifest;
+import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.osgi.framework.Constants;
 import org.osgi.framework.Version;
 
@@ -50,7 +50,7 @@ public final class SimpleBundleInfo implements BundleInfo {
   public SimpleBundleInfo(BundleManifest bm, String location) { 
     _contentName = new ContentImpl(
         bm.getSymbolicName(), 
-        ManifestHeaderProcessor.parseBundleSymbolicName(bm.getSymbolicName()).getValue());
+        ManifestHeaderProcessor.parseBundleSymbolicName(bm.getSymbolicName()).getAttributes());
     _version = bm.getVersion();
     _attributes = bm.getRawAttributes();
     _location = location;
@@ -67,7 +67,7 @@ public final class SimpleBundleInfo implements BundleInfo {
     if (_exportServices == null) {
       _exportServices = getContentSetFromHeader (_attributes, Constants.EXPORT_SERVICE);
     }
-    return _exportPackages;
+    return _exportServices;
   }
 
   public Map<String, String> getHeaders() {

@@ -18,11 +18,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
+        <groupId>org.apache.aries.samples</groupId>
         <artifactId>helloworld</artifactId>
-        <version>0.4-SNAPSHOT</version>
+        <version>1.0.1-SNAPSHOT</version>
     </parent>
 
+    <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
     <artifactId>org.apache.aries.samples.blueprint.helloworld.assembly</artifactId>
     <name>Apache Aries Blueprint HelloWorld Assembly</name>
     <packaging>pom</packaging>
@@ -32,16 +33,19 @@
         <dependency>
             <groupId>org.eclipse</groupId>
             <artifactId>osgi</artifactId>
+            <version>3.5.0.v20090520</version>
         </dependency>
 
         <dependency>
             <groupId>org.eclipse.equinox</groupId>
             <artifactId>cm</artifactId>
+            <version>3.2.0-v20070116</version>
         </dependency>
 
         <dependency>
             <groupId>org.eclipse.osgi</groupId>
             <artifactId>services</artifactId>
+            <version>3.1.200-v20070605</version>
         </dependency>
 
         <dependency>
@@ -63,6 +67,15 @@
             <groupId>org.apache.aries</groupId>
             <artifactId>org.apache.aries.util</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.aries.proxy</groupId>
+            <artifactId>org.apache.aries.proxy</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>asm</groupId>
+            <artifactId>asm-all</artifactId>
+        </dependency>
+
 
         <dependency>
             <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
@@ -85,37 +98,20 @@
 
         <plugins>
             <plugin>
-                  <groupId>org.apache.maven.plugins</groupId>
-                  <artifactId>maven-resources-plugin</artifactId>
-                  <configuration>
-                        <outputDirectory>${project.build.directory}</outputDirectory>
-                  </configuration>
-                  <executions>
-                        <execution>
-                        <id>filter</id>
-                        <phase>generate-resources</phase>
-                            <goals>
-                                <goal>resources</goal>
-                            </goals>
-                  </execution>
-                  </executions>
-           </plugin>
-
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
                 <configuration>
                     <outputDirectory>${project.build.directory}</outputDirectory>
                 </configuration>
                 <executions>
-                    <execution>
-                        <id>filter</id>
-                        <phase>generate-resources</phase>
-                        <goals>
-                            <goal>resources</goal>
-                        </goals>
-                    </execution>
-                </executions>
+                  <execution>
+                     <id>filter</id>
+                     <phase>generate-resources</phase>
+                     <goals>
+                        <goal>resources</goal>
+                     </goals>
+                  </execution>
+                 </executions>
             </plugin>
 
             <plugin>

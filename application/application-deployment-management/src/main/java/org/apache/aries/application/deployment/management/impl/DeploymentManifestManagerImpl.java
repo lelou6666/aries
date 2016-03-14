@@ -44,15 +44,14 @@ import org.apache.aries.application.ApplicationMetadata;
 import org.apache.aries.application.Content;
 import org.apache.aries.application.InvalidAttributeException;
 import org.apache.aries.application.ServiceDeclaration;
-import org.apache.aries.application.deployment.management.internal.MessageUtil;
 import org.apache.aries.application.management.AriesApplication;
 import org.apache.aries.application.management.BundleInfo;
 import org.apache.aries.application.management.ResolveConstraint;
 import org.apache.aries.application.management.ResolverException;
-import org.apache.aries.application.management.spi.repository.PlatformRepository;
 import org.apache.aries.application.management.spi.resolve.AriesApplicationResolver;
 import org.apache.aries.application.management.spi.resolve.DeploymentManifestManager;
 import org.apache.aries.application.management.spi.resolve.PostResolveTransformer;
+import org.apache.aries.application.management.spi.resolve.PreResolveHook;
 import org.apache.aries.application.management.spi.runtime.LocalPlatform;
 import org.apache.aries.application.modelling.DeployedBundles;
 import org.apache.aries.application.modelling.ExportedPackage;
@@ -65,10 +64,10 @@ import org.apache.aries.application.modelling.ModellerException;
 import org.apache.aries.application.modelling.ModellingManager;
 import org.apache.aries.application.modelling.utils.ModellingHelper;
 import org.apache.aries.application.utils.AppConstants;
-import org.apache.aries.application.utils.filesystem.FileSystem;
-import org.apache.aries.application.utils.filesystem.IOUtils;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor.NameValueMap;
+import org.apache.aries.application.utils.manifest.ContentFactory;
+import org.apache.aries.util.filesystem.FileSystem;
+import org.apache.aries.util.io.IOUtils;
+import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.osgi.framework.Constants;
 import org.osgi.framework.Filter;
 import org.osgi.service.blueprint.container.ServiceUnavailableException;
@@ -86,6 +85,7 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
   private LocalPlatform localPlatform;
   private ModellingManager modellingManager;
   private ModellingHelper modellingHelper;
+  private List<PreResolveHook> preResolveHooks;
 
   public void setModellingManager (ModellingManager m) {
     modellingManager = m; 
@@ -103,6 +103,11 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
   public void setLocalPlatform(LocalPlatform localPlatform)
   {
     this.localPlatform = localPlatform;
+  }
+  
+  public void setPreResolveHooks(List<PreResolveHook> hooks)
+  {
+    preResolveHooks = hooks;
   }
 
   public ModelledResourceManager getModelledResourceManager()
@@ -154,7 +159,7 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
     // This is because we want to make sure all bundles we passed into resolver the same as what we are going to get from resolver. 
     List<Content> restrictedReqs = new ArrayList<Content>();
     for (ResolveConstraint constraint : constraints ) {
-      Content content = ManifestHeaderProcessor.parseContent(constraint.getBundleName(), constraint.getVersionRange().toString());
+      Content content = ContentFactory.parseContent(constraint.getBundleName(), constraint.getVersionRange().toString());
       restrictedReqs.add(content);
     }
     
@@ -175,24 +180,9 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
    * @return
    * @throws ResolverException
    */
-  @Override
-  public DeployedBundles generateDeployedBundles
-  ( 
-      ApplicationMetadata appMetadata, 
-      Collection<ModelledResource> provideByValueBundles, 
-      Collection<Content> otherBundles) throws ResolverException {  
-    
-		_logger.debug(LOG_ENTRY, "generateDeployedBundles", new Object[] {
-				appMetadata, provideByValueBundles, otherBundles });
-		DeployedBundles bundles = generateDeployedBundles(appMetadata,
-				provideByValueBundles, otherBundles, null);
-		_logger.debug(LOG_EXIT, "generateDeploymentManifest",
-				new Object[] { bundles });
-		return bundles;
-  }
-    
-    public DeployedBundles generateDeployedBundles(ApplicationMetadata appMetadata,
-            Collection<ModelledResource> provideByValueBundles, Collection<Content> otherBundles, PlatformRepository platformRepository)
+    @Override
+	public DeployedBundles generateDeployedBundles(ApplicationMetadata appMetadata,
+            Collection<ModelledResource> provideByValueBundles, Collection<Content> otherBundles)
             throws ResolverException {
      
     Collection<Content> useBundleSet = appMetadata.getUseBundles();
@@ -219,6 +209,13 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
     }
     byValueBundles.add(fakeBundleResource);
     
+    Collection<ModelledResource> fakeResources = new ArrayList<ModelledResource>();
+    for (PreResolveHook hook : preResolveHooks) {
+      hook.collectFakeResources(fakeResources);
+    }
+    
+    byValueBundles.addAll(fakeResources);
+    
     String appSymbolicName = appMetadata.getApplicationSymbolicName();
     String appVersion = appMetadata.getApplicationVersion().toString();
     String uniqueName = appSymbolicName + "_" + appVersion;
@@ -226,7 +223,7 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
     DeployedBundles deployedBundles = modellingHelper.createDeployedBundles(appSymbolicName, appContentIB, useBundleIB, Arrays.asList(fakeBundleResource));
     Collection<ModelledResource> bundlesToBeProvisioned = resolver.resolve(
         appSymbolicName, appVersion, byValueBundles, bundlesToResolve);
-    pruneFakeBundleFromResults (bundlesToBeProvisioned);
+    pruneFakeBundlesFromResults (bundlesToBeProvisioned, fakeResources);
 
     if (bundlesToBeProvisioned.isEmpty()) {
       throw new ResolverException(MessageUtil.getMessage("EMPTY_DEPLOYMENT_CONTENT",uniqueName));
@@ -244,25 +241,22 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
       bundlesToResolve.addAll(appContent);
       Collection<ImportedBundle> slimmedDownUseBundle = narrowUseBundles(useBundleIB, requiredUseBundle);
       bundlesToResolve.addAll(toContent(slimmedDownUseBundle));
-      if (platformRepository != null) {
-        bundlesToBeProvisioned = resolver.resolve(appSymbolicName, appVersion,
-            byValueBundles, bundlesToResolve, platformRepository);
-      } else {
-        bundlesToBeProvisioned = resolver.resolve(appSymbolicName, appVersion,
-            byValueBundles, bundlesToResolve);
-      }
-      pruneFakeBundleFromResults (bundlesToBeProvisioned);
+      bundlesToBeProvisioned = resolver.resolve(appSymbolicName, appVersion,
+          byValueBundles, bundlesToResolve);
+       pruneFakeBundlesFromResults (bundlesToBeProvisioned, fakeResources);
       for (ModelledResource rbm : bundlesToBeProvisioned)
       {
         deployedBundles.addBundle(rbm);
       }
+      
+      requiredUseBundle = deployedBundles.getRequiredUseBundle();
     }
 
     // Check for circular dependencies. No shared bundle can depend on any 
     // isolated bundle. 
     Collection<ModelledResource> sharedBundles = new HashSet<ModelledResource>();
     sharedBundles.addAll (deployedBundles.getDeployedProvisionBundle());
-    sharedBundles.addAll (deployedBundles.getRequiredUseBundle()); 
+    sharedBundles.addAll (requiredUseBundle); 
 
     Collection<ModelledResource> appContentBundles = deployedBundles.getDeployedContent();
     Collection<Content> requiredSharedBundles = new ArrayList<Content>();
@@ -270,7 +264,7 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
       String version = mr.getExportedBundle().getVersion();
       String exactVersion = "[" + version + "," + version + "]";
 
-      Content ib = ManifestHeaderProcessor.parseContent(mr.getExportedBundle().getSymbolicName(), 
+      Content ib = ContentFactory.parseContent(mr.getExportedBundle().getSymbolicName(), 
           exactVersion);
       requiredSharedBundles.add(ib);
 
@@ -495,15 +489,21 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
     return fakeBundle;
   }
 
-  private void pruneFakeBundleFromResults (Collection<ModelledResource> results) { 
+  private void pruneFakeBundlesFromResults (Collection<ModelledResource> results, Collection<ModelledResource> fakeResources) { 
     _logger.debug(LOG_ENTRY, "pruneFakeBundleFromResults", new Object[]{results});
-    boolean fakeBundleRemoved = false;
+    
+    List<String> fakeBundles = new ArrayList<String>();
+    
+    fakeBundles.add(FAKE_BUNDLE_NAME);
+    for (ModelledResource resource : fakeResources) {
+      fakeBundles.add(resource.getSymbolicName());
+    }
+    
     Iterator<ModelledResource> it = results.iterator();
-    while (!fakeBundleRemoved && it.hasNext()) { 
+    while (it.hasNext()) { 
       ModelledResource mr = it.next();
-      if (mr.getExportedBundle().getSymbolicName().equals(FAKE_BUNDLE_NAME)) { 
+      if (fakeBundles.contains(mr.getSymbolicName())) { 
         it.remove();
-        fakeBundleRemoved = true;
       }
     }
     _logger.debug(LOG_EXIT, "pruneFakeBundleFromResults");
@@ -585,10 +585,10 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
    */
   private boolean providesPackage(ModelledResource bundle, String importPackages)
   {
-    Map<String, NameValueMap<String, String>> imports = ManifestHeaderProcessor.parseImportString(importPackages);
+    Map<String, Map<String, String>> imports = ManifestHeaderProcessor.parseImportString(importPackages);
     
     try {
-      for (Map.Entry<String, NameValueMap<String,String>> e : imports.entrySet()) {
+      for (Map.Entry<String, Map<String,String>> e : imports.entrySet()) {
         ImportedPackage importPackage = modellingManager.getImportedPackage(e.getKey(), e.getValue());
         
         for (ExportedPackage export : bundle.getExportedPackages()) {
@@ -633,7 +633,7 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
   {
     Collection<Content> contents = new ArrayList<Content>();
     for (ImportedBundle ib : ibs) {
-      contents.add(ManifestHeaderProcessor.parseContent(ib.getSymbolicName(), ib.getVersionRange()));
+      contents.add(ContentFactory.parseContent(ib.getSymbolicName(), ib.getVersionRange()));
     }
     return contents;
   }
@@ -661,13 +661,16 @@ public class DeploymentManifestManagerImpl implements DeploymentManifestManager
       URLConnection jarCon = jarUrl.openConnection();
       jarCon.connect();
       InputStream in = jarCon.getInputStream();
-      File temp = new File(getLocalPlatform().getTemporaryDirectory() + bundleFileName);
+      File dir = getLocalPlatform().getTemporaryDirectory();
+      File temp = new File(dir, bundleFileName);
       OutputStream out = new FileOutputStream(temp);
       IOUtils.copy(in, out);
       IOUtils.close(out);
+      
       result.add(modelledResourceManager.getModelledResource(null, FileSystem.getFSRoot(temp)));
       // delete the temp file
       temp.delete();
+      IOUtils.deleteRecursive(dir);
     }
     _logger.debug(LOG_EXIT, "getByValueBundles", new Object[]{result});
     return result;

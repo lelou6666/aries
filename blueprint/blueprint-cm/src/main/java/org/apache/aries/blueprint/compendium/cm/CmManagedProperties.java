@@ -34,7 +34,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.aries.blueprint.BeanProcessor;
-import org.apache.aries.blueprint.ExtendedBlueprintContainer;
+import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
 import org.apache.aries.blueprint.utils.ReflectionUtils;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.Constants;
@@ -141,6 +141,7 @@ public class CmManagedProperties implements ManagedObject, BeanProcessor {
             if (config != null) {
                 properties = config.getProperties();
             }
+            updated(properties);
         }
     }
 
@@ -150,17 +151,22 @@ public class CmManagedProperties implements ManagedObject, BeanProcessor {
 
     public void updated(final Dictionary props) {
         LOGGER.debug("Configuration updated for bean={} / pid={}", beanName, persistentId);
-        // Run in a separate thread to avoid re-entrance
-        new Thread() {
-            public void run() {
-                synchronized (lock) {
-                    properties = props;
-                    for (Object bean : beans) {
-                        inject(bean, false);
-                    }
-                }
+        synchronized (lock) {
+            properties = props;
+            for (Object bean : beans) {
+                updated(bean, properties);
             }
-        }.start();
+        }
+    }
+
+    public void updated(Object bean, final Dictionary props) {
+        LOGGER.debug("Configuration updated for bean={} / pid={}", beanName, persistentId);
+        synchronized (lock) {
+            properties = props;
+            if (bean != null) {
+                inject(bean, false);
+            }
+        }
     }
 
     public Object beforeInit(Object bean, String beanName, BeanCreator beanCreator, BeanMetadata beanData) {
@@ -207,28 +213,7 @@ public class CmManagedProperties implements ManagedObject, BeanProcessor {
                     methods.addAll(Arrays.asList(bean.getClass().getDeclaredMethods()));
                     for (Method method : methods) {
                         if (method.getName().equals(setterName)) {
-                            if (method.getParameterTypes().length == 0) {
-                                LOGGER.debug("Setter takes no parameters: {}", method);
-                                continue;
-                            }
-                            if (method.getParameterTypes().length > 1) {
-                                LOGGER.debug("Setter takes more than one parameter: {}", method);
-                                continue;
-                            }
-                            if (method.getReturnType() != Void.TYPE) {
-                                LOGGER.debug("Setter returns a value: {}", method);
-                                continue;
-                            }
-                            if (Modifier.isAbstract(method.getModifiers())) {
-                                LOGGER.debug("Setter is abstract: {}", method);
-                                continue;
-                            }
-                            if (!Modifier.isPublic(method.getModifiers())) {
-                                LOGGER.debug("Setter is not public: {}", method);
-                                continue;
-                            }
-                            if (Modifier.isStatic(method.getModifiers())) {
-                                LOGGER.debug("Setter is static: {}", method);
+                            if (shouldSkip(method)) {
                                 continue;
                             }
                             Class methodParameterType = method.getParameterTypes()[0];
@@ -275,6 +260,29 @@ public class CmManagedProperties implements ManagedObject, BeanProcessor {
                     LOGGER.warn("Unable to call method " + method + " on bean " + beanName, getRealCause(t));
                 }
             }
+        }
+    }
+
+    private boolean shouldSkip(Method method) {
+        String msg = null;
+        if (method.getParameterTypes().length == 0) {
+            msg = "takes no parameters";
+        } else if (method.getParameterTypes().length > 1) {
+            msg = "takes more than one parameter";
+        } else if (method.getReturnType() != Void.TYPE) {
+            msg = "returns a value";
+        } else if (Modifier.isAbstract(method.getModifiers())) {
+            msg = "is abstract";
+        } else if (!Modifier.isPublic(method.getModifiers())) {
+            msg = "is not public";
+        } else if (Modifier.isStatic(method.getModifiers())) {
+            msg = "is static";
+        }
+        if (msg != null) {
+            LOGGER.debug("Skipping setter {} because it " + msg, method);
+            return true;
+        } else {
+            return false;
         }
     }
 

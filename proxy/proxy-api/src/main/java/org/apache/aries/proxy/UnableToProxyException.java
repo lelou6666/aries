@@ -28,11 +28,10 @@ public class UnableToProxyException extends Exception
 
   public UnableToProxyException(Class<?> clazz)
   {
-    super(clazz.getName());
-    className = clazz.getName();
+    this(clazz.getName(), clazz.getName());
   }
 
-  public UnableToProxyException(Class<?> clazz, Exception e)
+  public UnableToProxyException(Class<?> clazz, Throwable e)
   {
     this(clazz.getName(), e);
   }
@@ -42,7 +41,23 @@ public class UnableToProxyException extends Exception
     super(e);
     this.className = className;
   }
+  
+  public UnableToProxyException(String className, String message)
+  {
+    super(message);
+    this.className = className;
+  }
+  
+  public UnableToProxyException(Object proxy, String msg)
+  {
+    this(proxy.getClass().getName(), msg);
+  }
 
+  public UnableToProxyException(Class<?> clazz, String msg)
+  {
+    this(clazz.getName(), msg);
+  }
+  
   public String getClassName()
   {
     return className;

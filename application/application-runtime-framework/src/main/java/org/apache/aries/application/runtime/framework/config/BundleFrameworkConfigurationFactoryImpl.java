@@ -46,6 +46,10 @@ public class BundleFrameworkConfigurationFactoryImpl implements BundleFrameworkC
      * Set up framework config properties
      */
     Properties frameworkConfig = new Properties();
+    // Problems occur if the parent framework has osgi.console set because the child framework
+    // will also attempt to listen on the same port which will cause port clashs. Setting this
+    // to null essentially turns the console off.
+    frameworkConfig.put("osgi.console", "none");
 
     String flowedSystemPackages = EquinoxFrameworkUtils.calculateSystemPackagesToFlow(
         EquinoxFrameworkUtils.getSystemExtraPkgs(parentCtx), metadata.getImportPackage());
@@ -78,14 +82,24 @@ public class BundleFrameworkConfigurationFactoryImpl implements BundleFrameworkC
     /**
      * Set up CompositeServiceFilter-Import header for framework manifest
      */
-    StringBuffer serviceImportFilter = new StringBuffer("(" + Constants.OBJECTCLASS + "="
-        + EquinoxFrameworkConstants.TRANSACTION_REGISTRY_BUNDLE + ")");
+    StringBuilder serviceImportFilter = new StringBuilder();
+    String txRegsitryImport = "(" + Constants.OBJECTCLASS + "=" + EquinoxFrameworkConstants.TRANSACTION_REGISTRY_BUNDLE + ")";
 
+    Collection<Filter> deployedServiceImports = metadata.getDeployedServiceImport();
+    //if there are more services than the txRegistry import a OR group is required for the Filter
+    if (deployedServiceImports.size() > 0){
+      serviceImportFilter.append("(|");
+    }
+    
     for (Filter importFilter : metadata.getDeployedServiceImport()) {
-      if (serviceImportFilter.length() > 0) {
-        serviceImportFilter.append(",");
-      }
       serviceImportFilter.append(importFilter.toString());
+    }
+    
+    serviceImportFilter.append(txRegsitryImport);
+    
+    //close the OR group if needed
+    if (deployedServiceImports.size() > 0){
+      serviceImportFilter.append(")");
     }
 
     frameworkBundleManifest.put(EquinoxFrameworkConstants.COMPOSITE_SERVICE_FILTER_IMPORT,
@@ -102,10 +116,12 @@ public class BundleFrameworkConfigurationFactoryImpl implements BundleFrameworkC
   {
     BundleFrameworkConfiguration config = null;
 
-    /**
-     * Set up framework config properties
-     */
+    // Set up framework config properties
     Properties frameworkConfig = new Properties();
+    // Problems occur if the parent framework has osgi.console set because the child framework
+    // will also attempt to listen on the same port which will cause port clashs. Setting this
+    // to null essentially turns the console off.
+    frameworkConfig.put("osgi.console", "none");
 
     if (parentCtx.getProperty(Constants.FRAMEWORK_SYSTEMPACKAGES_EXTRA) != null)
       frameworkConfig.put(Constants.FRAMEWORK_SYSTEMPACKAGES_EXTRA, parentCtx

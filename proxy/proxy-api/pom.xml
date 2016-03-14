@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -17,23 +18,40 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
      <parent>
          <groupId>org.apache.aries</groupId>
          <artifactId>java5-parent</artifactId>
          <version>0.3</version>
      </parent>
     
+=======
+
+    <parent>
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../../parent/pom.xml</relativePath>
+    </parent>
+
+>>>>>>> refs/remotes/apache/trunk
     <groupId>org.apache.aries.proxy</groupId>
     <artifactId>org.apache.aries.proxy.api</artifactId>
     <packaging>bundle</packaging>
     <name>Apache Aries Proxy API</name>
+<<<<<<< HEAD
     <version>0.3</version>
+=======
+    <version>1.0.2-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     <description>
         This bundle contains the Apache Aries Proxy service API.
     </description>
 
     <scm>
+<<<<<<< HEAD
        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/branches/experimental-release-by-module/proxy/proxy-api</connection>
        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/branches/experimental-release-by-module/proxy/proxy-api</developerConnection>
        <url>http://svn.apache.org/viewvc/aries/branches/experimental-release-by-module/proxy/proxy-api</url>
@@ -42,15 +60,35 @@
 
     <properties>
         <directory>proxy-api</directory>
+=======
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/proxy/proxy-api</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/proxy/proxy-api</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/proxy/proxy-api</url>
+    </scm>
+
+    <properties>
+        <!-- Export package versions are maintained in packageinfo files -->
+>>>>>>> refs/remotes/apache/trunk
         <aries.osgi.export.pkg>
-            org.apache.aries.proxy;
+            org.apache.aries.proxy*
         </aries.osgi.export.pkg>
+        <!--
+          We override the import versions for org.osgi.framework because we can operate on
+          a 4.2 framework (we only need 4.3 for weaving which is optional).
+        -->
         <aries.osgi.import.pkg>
+            org.osgi.framework;version="[1.5,2)",
+            org.osgi.framework.hooks.weaving;resolution:=optional,
             *
         </aries.osgi.import.pkg>
+<<<<<<< HEAD
         <aries.osgi.private.pkg>
         </aries.osgi.private.pkg>
         <Implementation-Version>4.4.4</Implementation-Version>
+=======
+        <aries.osgi.private.pkg />
+        <lastReleaseVersion>1.0.0</lastReleaseVersion>
+>>>>>>> refs/remotes/apache/trunk
     </properties>
 
     <dependencies>
@@ -65,6 +103,7 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.osgi</groupId>
             <artifactId>org.osgi.compendium</artifactId>
             <scope>provided</scope>
@@ -78,7 +117,31 @@
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
+=======
+            <groupId>org.apache.aries</groupId>
+            <artifactId>org.apache.aries.util</artifactId>
+            <version>1.0.0</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
     </dependencies>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.aries.versioning</groupId>
+                <artifactId>org.apache.aries.versioning.plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-verify</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>version-check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>
 

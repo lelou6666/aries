@@ -15,18 +15,14 @@
  */
 package org.apache.aries.blueprint.itests;
 
+import static org.apache.aries.blueprint.itests.Helper.mvnBundle;
 import static org.junit.Assert.assertNotNull;
 import static org.ops4j.pax.exam.CoreOptions.bootDelegationPackages;
-import static org.ops4j.pax.exam.CoreOptions.equinox;
-import static org.ops4j.pax.exam.CoreOptions.options;
-import static org.ops4j.pax.exam.CoreOptions.systemProperty;
-import static org.ops4j.pax.exam.CoreOptions.wrappedBundle;
-import static org.ops4j.pax.exam.OptionUtils.combine;
-import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.vmOption;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Arrays;
 
 import junit.framework.Assert;
 
@@ -35,45 +31,38 @@ import org.apache.aries.quiesce.manager.QuiesceCallback;
 import org.apache.aries.quiesce.participant.QuiesceParticipant;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.ops4j.pax.exam.Configuration;
 import org.ops4j.pax.exam.CoreOptions;
-import org.ops4j.pax.exam.Inject;
 import org.ops4j.pax.exam.Option;
-import org.ops4j.pax.exam.container.def.options.VMOption;
-import org.ops4j.pax.exam.junit.JUnit4TestRunner;
+import org.ops4j.pax.exam.junit.PaxExam;
 import org.ops4j.pax.exam.options.BootDelegationOption;
-import org.ops4j.pax.exam.options.MavenArtifactProvisionOption;
+import org.ops4j.pax.exam.spi.reactors.ExamReactorStrategy;
+import org.ops4j.pax.exam.spi.reactors.PerMethod;
 import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.Constants;
-import org.osgi.framework.Filter;
-import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.Version;
-import org.osgi.util.tracker.ServiceTracker;
 
-@RunWith(JUnit4TestRunner.class)
-public class QuiesceBlueprintTest extends AbstractIntegrationTest{
+@RunWith(PaxExam.class)
+@ExamReactorStrategy(PerMethod.class)
+public class QuiesceBlueprintTest extends AbstractBlueprintIntegrationTest {
 
   private static class TestQuiesceCallback implements QuiesceCallback
   {
     private int calls = 0;
 
-	public void bundleQuiesced(Bundle... bundlesQuiesced) {
-		System.out.println("bundleQuiesced "+ bundlesQuiesced);
-	      calls++;
-	}
-	
-	public int getCalls() {
-		return calls;
-	}
+  	public synchronized void bundleQuiesced(Bundle... bundlesQuiesced) {
+  		System.out.println("bundleQuiesced "+ Arrays.toString(bundlesQuiesced));
+  	  calls++;
+  	}
+  	
+  	public synchronized int getCalls() {
+  		return calls;
+  	}
   }
   
-  @Inject
-  protected BundleContext bundleContext;
- 
-  
-  private QuiesceParticipant getParticipant(String bundleName) throws InvalidSyntaxException {
+  @SuppressWarnings({ "rawtypes", "unchecked" })
+private QuiesceParticipant getParticipant(String bundleName) throws InvalidSyntaxException {
     ServiceReference[] refs = bundleContext.getServiceReferences(QuiesceParticipant.class.getName(), null);
     
     if(refs != null) {
@@ -88,43 +77,19 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
     return null;
   }
 
-  @org.ops4j.pax.exam.junit.Configuration
-  public static Option[] configuration() {
-    Option[] options = options(
-        bootDelegationPackages("javax.transaction", "javax.transaction.*"),
-        vmOption("-Dorg.osgi.framework.system.packages=javax.accessibility,javax.activation,javax.activity,javax.annotation,javax.annotation.processing,javax.crypto,javax.crypto.interfaces,javax.crypto.spec,javax.imageio,javax.imageio.event,javax.imageio.metadata,javax.imageio.plugins.bmp,javax.imageio.plugins.jpeg,javax.imageio.spi,javax.imageio.stream,javax.jws,javax.jws.soap,javax.lang.model,javax.lang.model.element,javax.lang.model.type,javax.lang.model.util,javax.management,javax.management.loading,javax.management.modelmbean,javax.management.monitor,javax.management.openmbean,javax.management.relation,javax.management.remote,javax.management.remote.rmi,javax.management.timer,javax.naming,javax.naming.directory,javax.naming.event,javax.naming.ldap,javax.naming.spi,javax.net,javax.net.ssl,javax.print,javax.print.attribute,javax.print.attribute.standard,javax.print.event,javax.rmi,javax.rmi.CORBA,javax.rmi.ssl,javax.script,javax.security.auth,javax.security.auth.callback,javax.security.auth.kerberos,javax.security.auth.login,javax.security.auth.spi,javax.security.auth.x500,javax.security.cert,javax.security.sasl,javax.sound.midi,javax.sound.midi.spi,javax.sound.sampled,javax.sound.sampled.spi,javax.sql,javax.sql.rowset,javax.sql.rowset.serial,javax.sql.rowset.spi,javax.swing,javax.swing.border,javax.swing.colorchooser,javax.swing.event,javax.swing.filechooser,javax.swing.plaf,javax.swing.plaf.basic,javax.swing.plaf.metal,javax.swing.plaf.multi,javax.swing.plaf.synth,javax.swing.table,javax.swing.text,javax.swing.text.html,javax.swing.text.html.parser,javax.swing.text.rtf,javax.swing.tree,javax.swing.undo,javax.tools,javax.xml,javax.xml.bind,javax.xml.bind.annotation,javax.xml.bind.annotation.adapters,javax.xml.bind.attachment,javax.xml.bind.helpers,javax.xml.bind.util,javax.xml.crypto,javax.xml.crypto.dom,javax.xml.crypto.dsig,javax.xml.crypto.dsig.dom,javax.xml.crypto.dsig.keyinfo,javax.xml.crypto.dsig.spec,javax.xml.datatype,javax.xml.namespace,javax.xml.parsers,javax.xml.soap,javax.xml.stream,javax.xml.stream.events,javax.xml.stream.util,javax.xml.transform,javax.xml.transform.dom,javax.xml.transform.sax,javax.xml.transform.stax,javax.xml.transform.stream,javax.xml.validation,javax.xml.ws,javax.xml.ws.handler,javax.xml.ws.handler.soap,javax.xml.ws.http,javax.xml.ws.soap,javax.xml.ws.spi,javax.xml.xpath,org.ietf.jgss,org.omg.CORBA,org.omg.CORBA.DynAnyPackage,org.omg.CORBA.ORBPackage,org.omg.CORBA.TypeCodePackage,org.omg.CORBA.portable,org.omg.CORBA_2_3,org.omg.CORBA_2_3.portable,org.omg.CosNaming,org.omg.CosNaming.NamingContextExtPackage,org.omg.CosNaming.NamingContextPackage,org.omg.Dynamic,org.omg.DynamicAny,org.omg.DynamicAny.DynAnyFactoryPackage,org.omg.DynamicAny.DynAnyPackage,org.omg.IOP,org.omg.IOP.CodecFactoryPackage,org.omg.IOP.CodecPackage,org.omg.Messaging,org.omg.PortableInterceptor,org.omg.PortableInterceptor.ORBInitInfoPackage,org.omg.PortableServer,org.omg.PortableServer.CurrentPackage,org.omg.PortableServer.POAManagerPackage,org.omg.PortableServer.POAPackage,org.omg.PortableServer.ServantLocatorPackage,org.omg.PortableServer.portable,org.omg.SendingContext,org.omg.stub.java.rmi,org.w3c.dom,org.w3c.dom.bootstrap,org.w3c.dom.css,org.w3c.dom.events,org.w3c.dom.html,org.w3c.dom.ls,org.w3c.dom.ranges,org.w3c.dom.stylesheets,org.w3c.dom.traversal,org.w3c.dom.views,org.xml.sax,org.xml.sax.ext,org.xml.sax.helpers,javax.transaction;partial=true;mandatory:=partial,javax.transaction.xa;partial=true;mandatory:=partial"),
-        
-        // Log
-        mavenBundle("org.ops4j.pax.logging", "pax-logging-api"),
-        mavenBundle("org.ops4j.pax.logging", "pax-logging-service"),
-        // Felix Config Admin
-        mavenBundle("org.apache.felix", "org.apache.felix.configadmin"),
-        // Felix mvn url handler
-        mavenBundle("org.ops4j.pax.url", "pax-url-mvn"),
+  @Configuration
+  public Option[] configuration() {
+    return new Option[] {
+            baseOptions(),
+            bootDelegationPackages("javax.transaction", "javax.transaction.*"),
+            CoreOptions.vmOption("-Dorg.osgi.framework.system.packages=javax.accessibility,javax.activation,javax.activity,javax.annotation,javax.annotation.processing,javax.crypto,javax.crypto.interfaces,javax.crypto.spec,javax.imageio,javax.imageio.event,javax.imageio.metadata,javax.imageio.plugins.bmp,javax.imageio.plugins.jpeg,javax.imageio.spi,javax.imageio.stream,javax.jws,javax.jws.soap,javax.lang.model,javax.lang.model.element,javax.lang.model.type,javax.lang.model.util,javax.management,javax.management.loading,javax.management.modelmbean,javax.management.monitor,javax.management.openmbean,javax.management.relation,javax.management.remote,javax.management.remote.rmi,javax.management.timer,javax.naming,javax.naming.directory,javax.naming.event,javax.naming.ldap,javax.naming.spi,javax.net,javax.net.ssl,javax.print,javax.print.attribute,javax.print.attribute.standard,javax.print.event,javax.rmi,javax.rmi.CORBA,javax.rmi.ssl,javax.script,javax.security.auth,javax.security.auth.callback,javax.security.auth.kerberos,javax.security.auth.login,javax.security.auth.spi,javax.security.auth.x500,javax.security.cert,javax.security.sasl,javax.sound.midi,javax.sound.midi.spi,javax.sound.sampled,javax.sound.sampled.spi,javax.sql,javax.sql.rowset,javax.sql.rowset.serial,javax.sql.rowset.spi,javax.swing,javax.swing.border,javax.swing.colorchooser,javax.swing.event,javax.swing.filechooser,javax.swing.plaf,javax.swing.plaf.basic,javax.swing.plaf.metal,javax.swing.plaf.multi,javax.swing.plaf.synth,javax.swing.table,javax.swing.text,javax.swing.text.html,javax.swing.text.html.parser,javax.swing.text.rtf,javax.swing.tree,javax.swing.undo,javax.tools,javax.xml,javax.xml.bind,javax.xml.bind.annotation,javax.xml.bind.annotation.adapters,javax.xml.bind.attachment,javax.xml.bind.helpers,javax.xml.bind.util,javax.xml.crypto,javax.xml.crypto.dom,javax.xml.crypto.dsig,javax.xml.crypto.dsig.dom,javax.xml.crypto.dsig.keyinfo,javax.xml.crypto.dsig.spec,javax.xml.datatype,javax.xml.namespace,javax.xml.parsers,javax.xml.soap,javax.xml.stream,javax.xml.stream.events,javax.xml.stream.util,javax.xml.transform,javax.xml.transform.dom,javax.xml.transform.sax,javax.xml.transform.stax,javax.xml.transform.stream,javax.xml.validation,javax.xml.ws,javax.xml.ws.handler,javax.xml.ws.handler.soap,javax.xml.ws.http,javax.xml.ws.soap,javax.xml.ws.spi,javax.xml.xpath,org.ietf.jgss,org.omg.CORBA,org.omg.CORBA.DynAnyPackage,org.omg.CORBA.ORBPackage,org.omg.CORBA.TypeCodePackage,org.omg.CORBA.portable,org.omg.CORBA_2_3,org.omg.CORBA_2_3.portable,org.omg.CosNaming,org.omg.CosNaming.NamingContextExtPackage,org.omg.CosNaming.NamingContextPackage,org.omg.Dynamic,org.omg.DynamicAny,org.omg.DynamicAny.DynAnyFactoryPackage,org.omg.DynamicAny.DynAnyPackage,org.omg.IOP,org.omg.IOP.CodecFactoryPackage,org.omg.IOP.CodecPackage,org.omg.Messaging,org.omg.PortableInterceptor,org.omg.PortableInterceptor.ORBInitInfoPackage,org.omg.PortableServer,org.omg.PortableServer.CurrentPackage,org.omg.PortableServer.POAManagerPackage,org.omg.PortableServer.POAPackage,org.omg.PortableServer.ServantLocatorPackage,org.omg.PortableServer.portable,org.omg.SendingContext,org.omg.stub.java.rmi,org.w3c.dom,org.w3c.dom.bootstrap,org.w3c.dom.css,org.w3c.dom.events,org.w3c.dom.html,org.w3c.dom.ls,org.w3c.dom.ranges,org.w3c.dom.stylesheets,org.w3c.dom.traversal,org.w3c.dom.views,org.xml.sax,org.xml.sax.ext,org.xml.sax.helpers,javax.transaction;partial=true;mandatory:=partial,javax.transaction.xa;partial=true;mandatory:=partial"),
+            Helper.blueprintBundles(),
 
-        // this is how you set the default log level when using pax
-        // logging (logProfile)
-        systemProperty("org.ops4j.pax.logging.DefaultServiceLog.level").value("DEBUG"),
-
-        // Bundles
-        mavenBundle("asm","asm-all"),
-        
-        mavenBundle("org.apache.aries.quiesce", "org.apache.aries.quiesce.api"),
-        mavenBundle("org.apache.aries", "org.apache.aries.util"),
-        mavenBundle("org.apache.aries.proxy", "org.apache.aries.proxy"),
-        mavenBundle("asm", "asm-all"),
-        mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint"), 
-        mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.testbundlea").noStart(),
-        mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.testbundleb").noStart(),
-        mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.testquiescebundle"),
-        //mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.cm"),
-        mavenBundle("org.osgi", "org.osgi.compendium"),
-        
-//        new VMOption( "-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=8000" ),
-        
-        equinox().version("3.5.0"));
-    options = updateOptions(options);
-    return options;
+            mvnBundle("org.apache.aries.quiesce", "org.apache.aries.quiesce.api"),
+            mvnBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.testbundlea", false),
+            mvnBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.testbundleb", false),
+            mvnBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.testquiescebundle")
+    };
   }
   
   
@@ -150,12 +115,6 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
     return new BootDelegationOption("org.apache.aries.unittest.fixture");
   }
   
-  public static MavenArtifactProvisionOption mavenBundle(String groupId,
-      String artifactId) {
-    return CoreOptions.mavenBundle().groupId(groupId).artifactId(artifactId)
-        .versionAsInProject();
-  }
-
   @Test
   public void testBasicQuieseEmptyCounter() throws Exception 
   {
@@ -164,11 +123,11 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
 	  //request is completed. 
 	  
 	System.out.println("In testBasicQuieseEmptyCounter");
-	Object obj = getOsgiService(TestBean.class);
+	Object obj = context().getService(TestBean.class);
 	
 	if (obj != null)
 	{
-	  QuiesceParticipant participant = getParticipant("org.apache.aries.blueprint");
+	  QuiesceParticipant participant = getParticipant("org.apache.aries.blueprint.core");
 	  
 	  if (participant != null)
 	  {
@@ -196,9 +155,9 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
 	    
 	    Assert.assertTrue("Quiesce callback should not have occurred yet; calls should be 0, but it is "+callback.getCalls(), callback.getCalls()==0);
 	    
-	    Thread.sleep(1500);
+	    t.join();
 	    
-	    System.out.println("After second sleep");
+	    System.out.println("After join");
 	    
 	    Assert.assertTrue("Quiesce callback should have occurred once; calls should be 1, but it is "+callback.getCalls(), callback.getCalls()==1);
 	    
@@ -223,11 +182,11 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
    //services. It should be quiesced immediately.
 	  
    System.out.println("In testNoServicesQuiesce");
-	Object obj = getOsgiService(TestBean.class);
+	Object obj = context().getService(TestBean.class);
 	
 	if (obj != null)
 	{    
-		QuiesceParticipant participant = getParticipant("org.apache.aries.blueprint");
+		QuiesceParticipant participant = getParticipant("org.apache.aries.blueprint.core");
 		
 		if (participant != null)
 		{
@@ -244,6 +203,8 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
 	        assertNotNull(bundleb);
 	        bundleb.start();
 	        
+	        Helper.getBlueprintContainerForBundle(context(), "org.apache.aries.blueprint.testbundleb");
+	        
 			participant.quiesce(callbackB, Collections.singletonList(getBundle(
 				"org.apache.aries.blueprint.testbundleb")));
 			
@@ -253,6 +214,8 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
 		    
 		    Assert.assertTrue("Quiesce callback B should have occurred; calls should be 1, but it is "+callbackB.getCalls(), callbackB.getCalls()==1);
 		    Assert.assertTrue("Quiesce callback A should not have occurred yet; calls should be 0, but it is "+callbackA.getCalls(), callbackA.getCalls()==0);
+		    
+		    bundleb.stop();
 		    
 		    participant.quiesce(callbackA, Collections.singletonList(getBundle(
 			"org.apache.aries.blueprint.testbundlea")));
@@ -280,11 +243,11 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
    //request has completed.
 	  
    System.out.println("In testMultiBundleQuiesce");
-	Object obj = getOsgiService(TestBean.class);
+	Object obj = context().getService(TestBean.class);
 	
 	if (obj != null)
 	{    
-		QuiesceParticipant participant = getParticipant("org.apache.aries.blueprint");
+		QuiesceParticipant participant = getParticipant("org.apache.aries.blueprint.core");
 		
 		if (participant != null)
 		{
@@ -308,7 +271,7 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
 		    t.start();
 		    Thread.sleep(200);
 	        
-			participant.quiesce(callback, bundles);
+			  participant.quiesce(callback, bundles);
 			
 		    System.out.println("Called Quiesce");
 		    
@@ -337,11 +300,11 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
    //the bundle is being quiesced.
 	  
    System.out.println("In testMultiRequestQuiesce");
-	Object obj = getOsgiService(TestBean.class);
+	Object obj = context().getService(TestBean.class);
 	
 	if (obj != null)
 	{    
-		QuiesceParticipant participant = getParticipant("org.apache.aries.blueprint");
+		QuiesceParticipant participant = getParticipant("org.apache.aries.blueprint.core");
 		
 		if (participant != null)
 		{
@@ -383,8 +346,8 @@ public class QuiesceBlueprintTest extends AbstractIntegrationTest{
   
   private class TestBeanClient implements Runnable
   {
-    private TestBean myService;
-    private int time;
+    private final TestBean myService;
+    private final int time;
     
     public TestBeanClient(TestBean myService, int time)
     {

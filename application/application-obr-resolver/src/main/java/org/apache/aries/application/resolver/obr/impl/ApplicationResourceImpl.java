@@ -26,7 +26,7 @@ import java.util.Map;
 
 import org.apache.aries.application.Content;
 import org.apache.aries.application.modelling.ImportedBundle;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
+import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.apache.felix.bundlerepository.Capability;
 import org.apache.felix.bundlerepository.Requirement;
 import org.apache.felix.bundlerepository.Resource;
@@ -65,6 +65,10 @@ public class ApplicationResourceImpl implements Resource
     public boolean matchCase(Dictionary dictionary)
     {
       return delgate.matchCase(dictionary);
+    }
+
+    public boolean matches(Map<java.lang.String,?> map) {
+        return delgate.matches(map);
     }
     
     public String toString()

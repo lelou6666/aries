@@ -27,11 +27,12 @@ import java.util.jar.Manifest;
 import org.apache.aries.application.DeploymentMetadata;
 import org.apache.aries.application.DeploymentMetadataFactory;
 import org.apache.aries.application.InvalidAttributeException;
-import org.apache.aries.application.filesystem.IFile;
 import org.apache.aries.application.management.AriesApplication;
 import org.apache.aries.application.management.BundleInfo;
 import org.apache.aries.application.management.ResolverException;
-import org.apache.aries.application.utils.manifest.ManifestProcessor;
+import org.apache.aries.util.filesystem.IFile;
+import org.apache.aries.util.io.IOUtils;
+import org.apache.aries.util.manifest.ManifestProcessor;
 
 public class DeploymentMetadataFactoryImpl implements DeploymentMetadataFactory
 {
@@ -48,7 +49,7 @@ public class DeploymentMetadataFactoryImpl implements DeploymentMetadataFactory
     try {
       return parseDeploymentMetadata(is);
     } finally {
-      is.close();
+      IOUtils.close(is);
     }
   }
 
@@ -62,7 +63,9 @@ public class DeploymentMetadataFactoryImpl implements DeploymentMetadataFactory
     try {
       return new DeploymentMetadataImpl(manifest);
     } catch (InvalidAttributeException iae) {
-      throw new IOException(iae);
+      IOException e = new IOException();
+      e.initCause(iae);
+      throw e;
     }
   }
 

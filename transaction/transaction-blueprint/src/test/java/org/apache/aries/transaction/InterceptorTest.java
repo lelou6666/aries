@@ -18,44 +18,75 @@
  */
 package org.apache.aries.transaction;
 
+import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.replay;
+
 import java.io.IOException;
 
 import javax.transaction.Transaction;
 import javax.transaction.TransactionManager;
 
-import org.apache.aries.unittest.mocks.MethodCall;
-import org.apache.aries.unittest.mocks.Skeleton;
+import org.apache.aries.transaction.pojo.AnnotatedPojo;
+import org.easymock.EasyMock;
+import org.easymock.IMocksControl;
 import org.junit.Test;
+import org.osgi.service.coordinator.Coordination;
+import org.osgi.service.coordinator.CoordinationException;
+import org.osgi.service.coordinator.Coordinator;
 
 public class InterceptorTest {
-    private Transaction t;
-    
-    @Test
-    public void testRollbackOnException() {
-        TxInterceptorImpl sut = new TxInterceptorImpl();
-        sut.setTransactionManager(Skeleton.newMock(TransactionManager.class));
-        
-        sut.postCallWithException(null, null, new IllegalStateException(), newTranToken());
-        assertRolledBack();
-        sut.postCallWithException(null, null, new Error(), newTranToken());
-        assertRolledBack();
 
-        sut.postCallWithException(null, null, new Exception(), newTranToken());
-        assertNotRolledBack();
-        sut.postCallWithException(null, null, new IOException(), newTranToken());
-        assertNotRolledBack();
+    @Test
+    public void testRollbackOnException() throws Throwable {
+        runPostCall(false);
+        runPostCall(true);
+    }
+
+    private void runPostCall(boolean failCoordination) throws Throwable {
+        postCallWithTransaction(new IllegalStateException(), true, failCoordination);
+        postCallWithTransaction(new Error(), true, failCoordination);
+        postCallWithTransaction(new Exception(), false, failCoordination);
+        postCallWithTransaction(new IOException(), false, failCoordination);
     }
     
-    private void assertNotRolledBack() {
-        Skeleton.getSkeleton(t).assertNotCalled(new MethodCall(Transaction.class, "setRollbackOnly"));
+    private CoordinationException coordinationException(Throwable th) {
+        Coordination coordination = EasyMock.createMock(Coordination.class);
+        expect(coordination.getId()).andReturn(1l);
+        expect(coordination.getName()).andReturn("Test");
+        replay(coordination);
+        CoordinationException cex = new CoordinationException("Simulating exception", 
+                                                              coordination , 
+                                                              CoordinationException.FAILED,
+                                                              th);
+        return cex;
     }
     
-    private void assertRolledBack() {
-        Skeleton.getSkeleton(t).assertCalled(new MethodCall(Transaction.class, "setRollbackOnly"));
+    private void postCallWithTransaction(Throwable th, boolean expectRollback, boolean failCoordination) throws Throwable {
+        IMocksControl c = EasyMock.createControl();
+        TransactionManager tm = c.createMock(TransactionManager.class);
+        Coordinator coordinator = c.createMock(Coordinator.class);
+        ComponentTxData txData = new ComponentTxData(AnnotatedPojo.class);
+        TxInterceptorImpl sut = new TxInterceptorImpl(tm, coordinator, txData );
+        Transaction tran = c.createMock(Transaction.class);
+        
+        if (expectRollback) {
+            tran.setRollbackOnly();
+            EasyMock.expectLastCall();
+        }
+        Coordination coordination = c.createMock(Coordination.class);
+        coordination.end();
+        if (failCoordination) {
+            EasyMock.expectLastCall().andThrow(coordinationException(th));
+        } else {
+            EasyMock.expectLastCall();
+        }
+        
+        c.replay();
+        TransactionToken tt = new TransactionToken(tran, null, TransactionAttribute.REQUIRED);
+        
+        tt.setCoordination(coordination );
+        sut.postCallWithException(null, this.getClass().getMethods()[0], th, tt);
+        c.verify();
     }
     
-    private TransactionToken newTranToken() {
-        t = Skeleton.newMock(Transaction.class);
-        return new TransactionToken(t, null, TransactionAttribute.REQUIRED);
-    }
 }

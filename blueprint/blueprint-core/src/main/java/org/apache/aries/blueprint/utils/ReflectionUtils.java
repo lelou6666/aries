@@ -18,15 +18,17 @@
  */
 package org.apache.aries.blueprint.utils;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.security.AccessControlContext;
 import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
@@ -40,9 +42,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 
-import org.apache.aries.blueprint.ExtendedBlueprintContainer;
 import org.apache.aries.blueprint.container.GenericType;
 import org.apache.aries.blueprint.di.ExecutionContext;
+import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
 import org.osgi.framework.BundleReference;
 import org.osgi.service.blueprint.container.ComponentDefinitionException;
 
@@ -53,7 +55,7 @@ import org.osgi.service.blueprint.container.ComponentDefinitionException;
  */
 public class ReflectionUtils {
 
-    // TODO: MLK: PropertyDescriptor holds a reference to Method which holds a reference to the Class itself
+    private static Map<Class<?>, WeakReference<Method[]>> publicMethods = Collections.synchronizedMap(new WeakHashMap<Class<?>, WeakReference<Method[]>>());
     private static Map<Class<?>, PropertyDescriptor[][]> beanInfos = Collections.synchronizedMap(new WeakHashMap<Class<?>, PropertyDescriptor[][]>());
 
     public static boolean hasDefaultConstructor(Class type) {
@@ -85,6 +87,19 @@ public class ReflectionUtils {
         }
         return classes;
     }
+    
+    public static Set<Class<?>> getImplementedInterfacesAsClasses(Set<Class<?>> classes, Class<?> clazz) {
+        if (clazz != null && clazz != Object.class) {
+            for (Class<?> itf : clazz.getInterfaces()) {
+                if (Modifier.isPublic(itf.getModifiers())) {
+                    classes.add(itf);
+                }
+                getImplementedInterfacesAsClasses(classes, itf);
+            }
+            getImplementedInterfacesAsClasses(classes, clazz.getSuperclass());
+        }
+        return classes;
+    }
 
     public static Set<String> getSuperClasses(Set<String> classes, Class clazz) {
         if (clazz != null && clazz != Object.class) {
@@ -98,21 +113,79 @@ public class ReflectionUtils {
 
     public static Method getLifecycleMethod(Class clazz, String name) {
         if (name != null) {
-            try {
-                Method method = clazz.getMethod(name);
-                if (Void.TYPE.equals(method.getReturnType())) {
+            for (Method method : getPublicMethods(clazz)) {
+                if (method.getName().equals(name)
+                        && method.getParameterTypes().length == 0
+                        && Void.TYPE.equals(method.getReturnType())) {
                     return method;
                 }
-            } catch (NoSuchMethodException e) {
-                // fall thru
             }
         }
         return null;
     }
-    
+
+    public static Method[] getPublicMethods(Class clazz) {
+        WeakReference<Method[]> ref = publicMethods.get(clazz);
+        Method[] methods = ref != null ? ref.get() : null;
+        if (methods == null) {
+            ArrayList<Method> array = new ArrayList<Method>();
+            doGetPublicMethods(clazz, array);
+            methods = array.toArray(new Method[array.size()]);
+            publicMethods.put(clazz, new WeakReference<Method[]>(methods));
+        }
+        return methods;
+    }
+
+    private static void doGetPublicMethods(Class clazz, ArrayList<Method> methods) {
+        Class parent = clazz.getSuperclass();
+        if (parent != null) {
+            doGetPublicMethods(parent, methods);
+        }
+        for (Class interf : clazz.getInterfaces()) {
+            doGetPublicMethods(interf, methods);
+        }
+        if (Modifier.isPublic(clazz.getModifiers())) {
+            for (Method mth : clazz.getMethods()) {
+                removeByNameAndSignature(methods, mth);
+                methods.add(mth);
+            }
+        }
+    }
+
+    private static void removeByNameAndSignature(ArrayList<Method> methods, Method toRemove) {
+        for (int i = 0; i < methods.size(); i++) {
+            Method m = methods.get(i);
+            if (m != null &&
+                    m.getReturnType() == toRemove.getReturnType() &&
+                    m.getName() == toRemove.getName() &&
+                    arrayContentsEq(m.getParameterTypes(),
+                            toRemove.getParameterTypes())) {
+                methods.remove(i--);
+            }
+        }
+    }
+
+    private static boolean arrayContentsEq(Object[] a1, Object[] a2) {
+        if (a1 == null) {
+            return a2 == null || a2.length == 0;
+        }
+        if (a2 == null) {
+            return a1.length == 0;
+        }
+        if (a1.length != a2.length) {
+            return false;
+        }
+        for (int i = 0; i < a1.length; i++) {
+            if (a1[i] != a2[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static List<Method> findCompatibleMethods(Class clazz, String name, Class[] paramTypes) {
         List<Method> methods = new ArrayList<Method>();
-        for (Method method : clazz.getMethods()) {
+        for (Method method : getPublicMethods(clazz)) {
             Class[] methodParams = method.getParameterTypes();
             if (name.equals(method.getName()) && Void.TYPE.equals(method.getReturnType()) && methodParams.length == paramTypes.length && !method.isBridge()) {
                 boolean assignable = true;
@@ -142,7 +215,7 @@ public class ReflectionUtils {
             Map<String,List<Method>> setters = new HashMap<String, List<Method>>();
             Set<String> illegalProperties = new HashSet<String>();
             
-            for (Method method : clazz.getMethods()) {
+            for (Method method : getPublicMethods(clazz)) {
                 if (Modifier.isStatic(method.getModifiers()) || method.isBridge()) continue;
                 
                 String name = method.getName();
@@ -360,11 +433,15 @@ public class ReflectionUtils {
     }
     
     private static class FieldPropertyDescriptor extends PropertyDescriptor {
-        private final Field field;
+        // instead of holding on to the java.lang.reflect.Field objects we retrieve it every time. The reason is that PropertyDescriptors are 
+        // used as values in a WeakHashMap with the class corresponding to the field as the key
+        private final String fieldName;
+        private final WeakReference<Class<?>> declaringClass;
         
         public FieldPropertyDescriptor(String name, Field field) {
             super(name);
-            this.field = field;
+            this.fieldName = field.getName();
+            this.declaringClass = new WeakReference(field.getDeclaringClass());
         }
 
         public boolean allowsGet() {
@@ -374,14 +451,19 @@ public class ReflectionUtils {
         public boolean allowsSet() {
             return true;
         }
+        
+        private Field getField(ExtendedBlueprintContainer container) throws ClassNotFoundException, NoSuchFieldException {
+            if (declaringClass.get() == null) throw new ClassNotFoundException("Declaring class was garbage collected");
+            
+            return declaringClass.get().getDeclaredField(fieldName);
+        }
 
-        protected Object internalGet(ExtendedBlueprintContainer container, final Object instance) throws IllegalArgumentException, IllegalAccessException {
+        protected Object internalGet(final ExtendedBlueprintContainer container, final Object instance) throws Exception {
             if (useContainersPermission(container)) {
                 try {
                     return AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
                         public Object run() throws Exception {
-                            field.setAccessible(true);
-                            return field.get(instance);
+                            return doInternalGet(container, instance);
                         }                        
                     });
                 } catch (PrivilegedActionException pae) {
@@ -390,28 +472,49 @@ public class ReflectionUtils {
                     else throw (RuntimeException) e;
                 }
             } else {
-                field.setAccessible(true);
+                return doInternalGet(container, instance);
+            }
+        }
+        
+        private Object doInternalGet(ExtendedBlueprintContainer container, Object instance) throws Exception {
+            Field field = getField(container);
+            boolean isAccessible = field.isAccessible();
+            field.setAccessible(true);
+            try {
                 return field.get(instance);
+            } finally {
+                field.setAccessible(isAccessible);
             }
         }
 
-        protected void internalSet(ExtendedBlueprintContainer container, final Object instance, Object value) throws Exception {
-            final Object convertedValue = convert(value, field.getGenericType());
-            if (useContainersPermission(container)) {
-                try {
-                    AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
-                        public Object run() throws Exception {
-                            field.setAccessible(true);
-                            field.set(instance, convertedValue);
-                            return null;
-                        }                        
-                    });
-                } catch (PrivilegedActionException pae) {
-                    throw pae.getException();
+        protected void internalSet(final ExtendedBlueprintContainer container, final Object instance, final Object value) throws Exception {
+            try {
+                Boolean wasSet = AccessController.doPrivileged(new PrivilegedExceptionAction<Boolean>() {
+                    public Boolean run() throws Exception {
+                      if (useContainersPermission(container)) {
+                        doInternalSet(container, instance, value);
+                        return Boolean.TRUE;
+                      }
+                      return Boolean.FALSE;
+                    }                        
+                });
+                if(!!!wasSet) {
+                  doInternalSet(container, instance, value);
                 }
-            } else {
-                field.setAccessible(true);
+            } catch (PrivilegedActionException pae) {
+                throw pae.getException();
+            }
+        }
+        
+        private void doInternalSet(ExtendedBlueprintContainer container, Object instance, Object value) throws Exception {
+            Field field = getField(container);
+            final Object convertedValue = convert(value, field.getGenericType());
+            boolean isAccessible = field.isAccessible();
+            field.setAccessible(true);
+            try {
                 field.set(instance, convertedValue);
+            } finally {
+                field.setAccessible(isAccessible);
             }
         }
         
@@ -423,12 +526,9 @@ public class ReflectionUtils {
          * @param container
          * @return
          */
-        private boolean useContainersPermission(ExtendedBlueprintContainer container) {
-            ClassLoader loader = AccessController.doPrivileged(new PrivilegedAction<ClassLoader>() {
-                public ClassLoader run() {
-                    return field.getDeclaringClass().getClassLoader();
-                }
-            });            
+        private boolean useContainersPermission(ExtendedBlueprintContainer container) throws ClassNotFoundException {
+            if (declaringClass.get() == null) throw new ClassNotFoundException("Declaring class was garbage collected");
+            ClassLoader loader = declaringClass.get().getClassLoader();
             
             if (loader == null) return false;
             
@@ -441,14 +541,68 @@ public class ReflectionUtils {
         }
     }
     
+    private static class MethodDescriptor {
+        private final String methodName;
+        private final WeakReference<Class<?>> declaringClass;
+        private final List<WeakReference<Class<?>>> argClasses;
+        
+        public MethodDescriptor(Method method) {
+            methodName = method.getName();
+            declaringClass = new WeakReference<Class<?>>(method.getDeclaringClass());
+            
+            List<WeakReference<Class<?>>> accumulator = new ArrayList<WeakReference<Class<?>>>();
+            for (Class<?> c : method.getParameterTypes()) {
+                accumulator.add(new WeakReference<Class<?>>(c));
+            }
+            argClasses = Collections.unmodifiableList(accumulator);
+        }
+        
+        public Method getMethod(ExtendedBlueprintContainer container) throws ClassNotFoundException, NoSuchMethodException {
+            Class<?>[] argumentClasses = new Class<?>[argClasses.size()];
+            for (int i=0; i<argClasses.size(); i++) {
+                argumentClasses[i] = argClasses.get(i).get();
+                if (argumentClasses[i] == null) throw new ClassNotFoundException("Argument class was garbage collected");
+            }
+            
+            if (declaringClass.get() == null) throw new ClassNotFoundException("Declaring class was garbage collected");
+            
+            return declaringClass.get().getMethod(methodName, argumentClasses);
+        }
+        
+        public String toString() {
+            StringBuilder builder = new StringBuilder();
+            builder.append(declaringClass.get()).append(".").append(methodName).append("(");
+            
+            boolean first = true;
+            for (WeakReference<Class<?>> wcl : argClasses) {
+                if (!!!first) builder.append(",");
+                else first = false;
+                
+                builder.append(wcl.get());
+            }
+
+            builder.append(")");
+            return builder.toString();
+        }
+    }
+    
     private static class MethodPropertyDescriptor extends PropertyDescriptor {
-        private final Method getter;
-        private final Collection<Method> setters;
+        // instead of holding on to the java.lang.reflect.Method objects we retrieve it every time. The reason is that PropertyDescriptors are 
+        // used as values in a WeakHashMap with the class corresponding to the methods as the key
+        private final MethodDescriptor getter;
+        private final Collection<MethodDescriptor> setters;
 
         private MethodPropertyDescriptor(String name, Method getter, Collection<Method> setters) {
             super(name);
-            this.getter = getter;
-            this.setters = (setters != null) ? setters : Collections.<Method>emptyList();
+            this.getter = (getter != null) ? new MethodDescriptor(getter) : null;
+            
+            if (setters != null) {
+                Collection<MethodDescriptor> accumulator = new ArrayList<MethodDescriptor>();
+                for (Method s : setters) accumulator.add(new MethodDescriptor(s));
+                this.setters = Collections.unmodifiableCollection(accumulator);
+            } else {
+                this.setters = Collections.emptyList();
+            }
         }
         
         public boolean allowsGet() {
@@ -460,9 +614,9 @@ public class ReflectionUtils {
         }
         
         protected Object internalGet(ExtendedBlueprintContainer container, Object instance) 
-                throws IllegalArgumentException, IllegalAccessException, InvocationTargetException {
+                throws Exception {
             if (getter != null) {
-                return getter.invoke(instance);
+                return getter.getMethod(container).invoke(instance);
             } else {
                 throw new UnsupportedOperationException();
             }
@@ -470,42 +624,95 @@ public class ReflectionUtils {
         
         protected void internalSet(ExtendedBlueprintContainer container, Object instance, Object value) throws Exception {
             
-            Method setterMethod = findSetter(value);
+            Method setterMethod = findSetter(container, value);
 
             if (setterMethod != null) {
-                setterMethod.invoke(instance, convert(value, setterMethod.getGenericParameterTypes()[0]));
+                setterMethod.invoke(instance, convert(value, resolveParameterType(instance.getClass(), setterMethod)));
             } else {
                 throw new ComponentDefinitionException(
                         "No converter available to convert value "+value+" into a form applicable for the " + 
                         "setters of property "+getName());
             }
         }
-        
-        private Method findSetter(Object value) {
+
+        private Type resolveParameterType(Class<?> impl, Method setterMethod) {
+            Type type = setterMethod.getGenericParameterTypes()[0];
+            Class<?> declaringClass = setterMethod.getDeclaringClass();
+            TypeVariable<?>[] declaredVariables = declaringClass.getTypeParameters();
+
+            if (TypeVariable.class.isInstance(type)) {
+                // e.g.: "T extends Serializable"
+                TypeVariable variable = TypeVariable.class.cast(type);
+
+                int index = 0;
+                for (; index < declaredVariables.length; index++) {
+                    // find the class declaration index...
+                    if (variable == declaredVariables[index]) {
+                        break;
+                    }
+                }
+
+                if (index >= declaredVariables.length) {
+                    // not found - now what...
+                    return type;
+                }
+
+                // navigate from the implementation type up to the declaring super
+                // class to find the real generic type...
+                Class<?> c = impl;
+                while (c != null && c != declaringClass) {
+                    Type sup = c.getGenericSuperclass();
+                    if (sup != null && ParameterizedType.class.isInstance(sup)) {
+                        ParameterizedType pt = ParameterizedType.class.cast(sup);
+                        if (declaringClass == pt.getRawType()) {
+                            Type t = pt.getActualTypeArguments()[index];
+                            return t;
+                        }
+                    }
+                    c = c.getSuperclass();
+                }
+                return type;
+            } else {
+                // not a generic type...
+                return type;
+            }
+        }
+
+        private Method findSetter(ExtendedBlueprintContainer container, Object value) throws Exception {
             Class<?> valueType = (value == null) ? null : value.getClass();
             
-            Method result = findMethodByClass(valueType);
+            Method getterMethod = (getter != null) ? getter.getMethod(container) : null;
+            Collection<Method> setterMethods = getSetters(container);
             
-            if (result == null) result = findMethodWithConversion(value);
+            Method result = findMethodByClass(getterMethod, setterMethods, valueType);
+            
+            if (result == null) result = findMethodWithConversion(setterMethods, value);
                         
             return result;
         }
         
-        private Method findMethodByClass(Class<?> arg)
+        private Collection<Method> getSetters(ExtendedBlueprintContainer container) throws Exception {
+            Collection<Method> result = new ArrayList<Method>();
+            for (MethodDescriptor md : setters) result.add(md.getMethod(container));
+            
+            return result;
+        }
+        
+        private Method findMethodByClass(Method getterMethod, Collection<Method> setterMethods, Class<?> arg)
                 throws ComponentDefinitionException {
             Method result = null;
 
-            if (!hasSameTypeSetter()) {
+            if (!hasSameTypeSetter(getterMethod, setterMethods)) {
                 throw new ComponentDefinitionException(
                         "At least one Setter method has to match the type of the Getter method for property "
                                 + getName());
             }
 
-            if (setters.size() == 1) {
-                return setters.iterator().next();
+            if (setterMethods.size() == 1) {
+                return setterMethods.iterator().next();
             }
             
-            for (Method m : setters) {
+            for (Method m : setterMethods) {
                 Class<?> paramType = m.getParameterTypes()[0];
 
                 if ((arg == null && Object.class.isAssignableFrom(paramType))
@@ -536,24 +743,25 @@ public class ReflectionUtils {
         }
         
         // ensure there is a setter that matches the type of the getter
-        private boolean hasSameTypeSetter() {
-            if (getter == null) {
+        private boolean hasSameTypeSetter(Method getterMethod, Collection<Method> setterMethods) {
+            if (getterMethod == null) {
                 return true;
             }
-            Iterator<Method> it = setters.iterator();
+
+            Iterator<Method> it = setterMethods.iterator();
             while (it.hasNext()) {
                 Method m = it.next();
-                if (m.getParameterTypes()[0].equals(getter.getReturnType())) {
+                if (m.getParameterTypes()[0].equals(getterMethod.getReturnType())) {
                     return true;
                 }
             }
             return false;
         }
 
-        private Method findMethodWithConversion(Object value) throws ComponentDefinitionException {
+        private Method findMethodWithConversion(Collection<Method> setterMethods, Object value) throws Exception {
             ExecutionContext ctx = ExecutionContext.Holder.getContext();
             List<Method> matchingMethods = new ArrayList<Method>();
-            for (Method m : setters) {
+            for (Method m : setterMethods) {
                 Type paramType = m.getGenericParameterTypes()[0];
                 if (ctx.canConvert(value, new GenericType(paramType))) matchingMethods.add(m);
             }

@@ -18,124 +18,83 @@
  */
 package org.apache.aries.blueprint.itests;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.ops4j.pax.exam.CoreOptions.equinox;
-import static org.ops4j.pax.exam.CoreOptions.options;
-import static org.ops4j.pax.exam.CoreOptions.systemProperty;
-
 import java.util.Currency;
 import java.util.Hashtable;
+
+import javax.inject.Inject;
 
 import org.apache.aries.blueprint.sample.Foo;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.Option;
-import org.ops4j.pax.exam.junit.JUnit4TestRunner;
+import org.ops4j.pax.exam.junit.PaxExam;
+import org.ops4j.pax.exam.spi.reactors.ExamReactorStrategy;
+import org.ops4j.pax.exam.spi.reactors.PerMethod;
 import org.osgi.framework.Bundle;
+import org.osgi.framework.BundleException;
+import org.osgi.framework.ServiceReference;
 import org.osgi.service.blueprint.container.BlueprintContainer;
 import org.osgi.service.cm.Configuration;
 import org.osgi.service.cm.ConfigurationAdmin;
 
-@RunWith(JUnit4TestRunner.class)
-public class TestConfigAdmin extends AbstractIntegrationTest {
+import static org.apache.aries.blueprint.itests.Helper.mvnBundle;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.ops4j.pax.exam.CoreOptions.junitBundles;
+
+@RunWith(PaxExam.class)
+@ExamReactorStrategy(PerMethod.class)
+public class TestConfigAdmin extends AbstractBlueprintIntegrationTest {
+    @Inject
+    ConfigurationAdmin ca;
 
     @Test
     public void testStrategyNone() throws Exception {
-        ConfigurationAdmin ca = getOsgiService(ConfigurationAdmin.class);
-        Configuration cf = ca.getConfiguration("blueprint-sample-managed.none", null);
-        Hashtable<String,String> props = new Hashtable<String,String>();
-        props.put("a", "5");
-        props.put("currency", "PLN");
-        cf.update(props);
+        ca.getConfiguration("blueprint-sample-managed.none", null).update(getConfig1());
+        startTestBundle();
 
-        Bundle bundle = getInstalledBundle("org.apache.aries.blueprint.sample");
-        assertNotNull(bundle);
-        bundle.start();
-
-        BlueprintContainer blueprintContainer = getBlueprintContainerForBundle("org.apache.aries.blueprint.sample", DEFAULT_TIMEOUT);
-        assertNotNull(blueprintContainer);
-
-        Foo foo = (Foo) blueprintContainer.getComponentInstance("none-managed");
-        assertNotNull(foo);
-
+        // foo should receive initial configuration
+        Foo foo = getComponent("none-managed");
         assertEquals(5, foo.getA());
         assertEquals(Currency.getInstance("PLN"), foo.getCurrency());
 
-        props = new Hashtable<String,String>();
-        props.put("a", "10");
-        props.put("currency", "USD");
-        cf = ca.getConfiguration("blueprint-sample-managed.none", null);
-        cf.update(props);
-
+        // foo should not reflect changes in config
+        ca.getConfiguration("blueprint-sample-managed.none", null).update(getConfig2());
         Thread.sleep(100);
-
         assertEquals(5, foo.getA());
         assertEquals(Currency.getInstance("PLN"), foo.getCurrency());
     }
 
+
+
     @Test
     public void testStrategyContainer() throws Exception {
-        ConfigurationAdmin ca = getOsgiService(ConfigurationAdmin.class);
-        Configuration cf = ca.getConfiguration("blueprint-sample-managed.container", null);
-        Hashtable<String,String> props = new Hashtable<String,String>();
-        props.put("a", "5");
-        props.put("currency", "PLN");
-        cf.update(props);
-
-        Bundle bundle = getInstalledBundle("org.apache.aries.blueprint.sample");
-        assertNotNull(bundle);
-        bundle.start();
-
-        BlueprintContainer blueprintContainer = getBlueprintContainerForBundle("org.apache.aries.blueprint.sample", DEFAULT_TIMEOUT);
-        assertNotNull(blueprintContainer);
-
-        Foo foo = (Foo) blueprintContainer.getComponentInstance("container-managed");
-        assertNotNull(foo);
-
+        // foo should have received initial configuration
+        ca.getConfiguration("blueprint-sample-managed.container", null).update(getConfig1());
+        startTestBundle();
+        Foo foo = getComponent("container-managed");
         assertEquals(5, foo.getA());
         assertEquals(Currency.getInstance("PLN"), foo.getCurrency());
 
-        props = new Hashtable<String,String>();
-        props.put("a", "10");
-        props.put("currency", "USD");
-        cf.update(props);
-
+        // foo bean properties should have been updated 
+        ca.getConfiguration("blueprint-sample-managed.container", null).update(getConfig2());
         Thread.sleep(100);
-
         assertEquals(10, foo.getA());
         assertEquals(Currency.getInstance("USD"), foo.getCurrency());
     }
 
     @Test
     public void testStrategyComponent() throws Exception {
-        ConfigurationAdmin ca = getOsgiService(ConfigurationAdmin.class);
-        Configuration cf = ca.getConfiguration("blueprint-sample-managed.component", null);
-        Hashtable<String,String> props = new Hashtable<String,String>();
-        props.put("a", "5");
-        props.put("currency", "PLN");
-        cf.update(props);
-
-        Bundle bundle = getInstalledBundle("org.apache.aries.blueprint.sample");
-        assertNotNull(bundle);
-        bundle.start();
-
-        BlueprintContainer blueprintContainer = getBlueprintContainerForBundle("org.apache.aries.blueprint.sample", DEFAULT_TIMEOUT);
-        assertNotNull(blueprintContainer);
-
-        Foo foo = (Foo) blueprintContainer.getComponentInstance("component-managed");
-        assertNotNull(foo);
-
+        // foo should receive initial configuration
+        ca.getConfiguration("blueprint-sample-managed.component", null).update(getConfig1());
+        startTestBundle();
+        Foo foo = getComponent("component-managed");
         assertEquals(5, foo.getA());
         assertEquals(Currency.getInstance("PLN"), foo.getCurrency());
 
-        props = new Hashtable<String,String>();
-        props.put("a", "10");
-        props.put("currency", "USD");
-        cf.update(props);
-
+        // Foo.update() should have been called but the bean properties should not have been updated
+        ca.getConfiguration("blueprint-sample-managed.component", null).update(getConfig2());
         Thread.sleep(100);
-
         assertEquals(5, foo.getA());
         assertEquals(Currency.getInstance("PLN"), foo.getCurrency());
         assertNotNull(foo.getProps());
@@ -143,53 +102,59 @@ public class TestConfigAdmin extends AbstractIntegrationTest {
         assertEquals("USD", foo.getProps().get("currency"));
     }
 
+    @SuppressWarnings("rawtypes")
     @Test
     public void testManagedServiceFactory() throws Exception {
-        ConfigurationAdmin ca = getOsgiService(ConfigurationAdmin.class);
         Configuration cf = ca.createFactoryConfiguration("blueprint-sample-managed-service-factory", null);
+        cf.update(getConfig1());
+        startTestBundle();
+        
+        // Make sure only one service is registered
+        // Ask the service registry, not the container, since the container might have got it wrong :)
+        Foo foo = context().getService(Foo.class, "(service.pid=blueprint-sample-managed-service-factory.*)");
+        ServiceReference[] refs = context().getAllServiceReferences(Foo.class.getName(), "(service.pid=blueprint-sample-managed-service-factory.*)");
+        assertNotNull("No services were registered for the managed service factory", refs);
+        assertEquals("Multiple services were registered for the same pid.", 1, refs.length);
+    }
+
+    private Hashtable<String, String> getConfig1() {
         Hashtable<String,String> props = new Hashtable<String,String>();
         props.put("a", "5");
         props.put("currency", "PLN");
-        cf.update(props);
-
-        Bundle bundle = getInstalledBundle("org.apache.aries.blueprint.sample");
-        assertNotNull(bundle);
-        bundle.start();
-
-        BlueprintContainer blueprintContainer = getBlueprintContainerForBundle("org.apache.aries.blueprint.sample", DEFAULT_TIMEOUT);
-        assertNotNull(blueprintContainer);
-
-        Thread.sleep(5000);
+        return props;
     }
 
-    @org.ops4j.pax.exam.junit.Configuration
+    private Hashtable<String, String> getConfig2() {
+        Hashtable<String, String> props;
+        props = new Hashtable<String,String>();
+        props.put("a", "10");
+        props.put("currency", "USD");
+        return props;
+    }
+
+    private <T>T getComponent(String componentId) {
+        BlueprintContainer blueprintContainer = Helper.getBlueprintContainerForBundle(context(), "org.apache.aries.blueprint.sample");
+        assertNotNull(blueprintContainer);
+
+        @SuppressWarnings("unchecked")
+        T component = (T)blueprintContainer.getComponentInstance(componentId);
+        assertNotNull(component);
+        return component;
+    }
+    
+    private void startTestBundle() throws BundleException {
+        Bundle bundle = context().getBundleByName("org.apache.aries.blueprint.sample");
+        assertNotNull(bundle);
+        bundle.start();
+    }
+
+    @org.ops4j.pax.exam.Configuration
     public static Option[] configuration() {
-        Option[] options = options(
-            // Log
-            mavenBundle("org.ops4j.pax.logging", "pax-logging-api"),
-            mavenBundle("org.ops4j.pax.logging", "pax-logging-service"),
-            // Felix Config Admin
-            mavenBundle("org.apache.felix", "org.apache.felix.configadmin"),
-            // Felix mvn url handler
-            mavenBundle("org.ops4j.pax.url", "pax-url-mvn"),
-
-
-            // this is how you set the default log level when using pax logging (logProfile)
-            systemProperty("org.ops4j.pax.logging.DefaultServiceLog.level").value("DEBUG"),
-
-            // Bundles
-            mavenBundle("org.apache.aries", "org.apache.aries.util"),
-            mavenBundle("org.apache.aries.proxy", "org.apache.aries.proxy"),
-            mavenBundle("asm", "asm-all"),
-            mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint"),
-            mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.sample").noStart(),
-            mavenBundle("org.osgi","org.osgi.compendium"),
-//            org.ops4j.pax.exam.container.def.PaxRunnerOptions.vmOption("-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"),
-
-            equinox().version("3.5.0")
-        );
-        options = updateOptions(options);
-        return options;
+        return new Option[] {
+            junitBundles(),
+            Helper.blueprintBundles(),
+            mvnBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.sample", false)
+        };
     }
 
 }

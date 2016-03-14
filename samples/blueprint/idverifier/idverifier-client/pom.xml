@@ -19,7 +19,7 @@
     <parent>
         <groupId>org.apache.aries.samples.blueprint.idverifier</groupId>
         <artifactId>idverifier</artifactId>
-        <version>0.4-SNAPSHOT</version>
+        <version>1.0.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>org.apache.aries.samples.blueprint.idverifier.client</artifactId>
@@ -33,6 +33,7 @@
         <dependency>
             <groupId>org.eclipse</groupId>
             <artifactId>osgi</artifactId>
+            <version>3.5.0.v20090520</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -58,11 +59,12 @@
                 <artifactId>maven-bundle-plugin</artifactId>
                 <configuration>
                     <instructions>
-                        <Bundle-SymbolicName>${pom.artifactId};blueprint.graceperiod:=true;blueprint.timeout:= 60000</Bundle-SymbolicName>
+                        <Bundle-SymbolicName>${project.artifactId};blueprint.graceperiod:=true;blueprint.timeout:= 60000</Bundle-SymbolicName>
                         <Bundle-Activator>org.apache.aries.samples.blueprint.idverifier.client.IDVerifierClientActivator</Bundle-Activator>
-                        <!--
-                                                <Bundle-Blueprint>/test.xml</Bundle-Blueprint>
-                        -->
+                        <Import-Package>
+                          org.apache.aries.samples.blueprint.idverifier.api;provide:=true,
+                          *
+                        </Import-Package>
                     </instructions>
                 </configuration>
             </plugin>
