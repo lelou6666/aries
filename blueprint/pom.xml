@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.aries</groupId>
         <artifactId>parent</artifactId>
-        <version>2.0.0</version>
+        <version>2.0.1</version>
         <relativePath>../parent/pom.xml</relativePath>
     </parent>
 
@@ -50,15 +50,20 @@
         <module>blueprint-web</module>
         <module>blueprint-web-osgi</module>
         <module>blueprint-jexl-evaluator</module>
+        <module>blueprint-repository</module>
         <module>blueprint-sample</module>
         <module>blueprint-annotation-api</module>
         <module>blueprint-annotation-impl</module>
         <module>blueprint-authz</module>
+        <module>blueprint-spring</module>
+        <module>blueprint-spring-extender</module>
         <module>blueprint-sample-annotation</module>
         <module>blueprint-sample-fragment</module>
         <module>blueprint-sample-war</module>
         <module>blueprint-testbundlea</module>
         <module>blueprint-testbundleb</module>
+        <module>blueprint-testbundlee</module>
+        <module>blueprint-testbundles</module>
         <module>blueprint-testquiescebundle</module>
         <module>blueprint-itests</module>
     </modules>

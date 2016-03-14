@@ -18,9 +18,9 @@
 
 -->
 <blueprint  xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
-            xmlns:tx="http://aries.apache.org/xmlns/transactions/v1.2.0">
+            xmlns:tx="http://aries.apache.org/xmlns/transactions/v2.0.0">
 
-	<tx:enable-annotations>false</tx:enable-annotations>
+	<tx:enable>false</tx:enable>
 	
 	<bean id="top" class="org.apache.aries.transaction.TestBean"/>
 </blueprint>

@@ -98,9 +98,9 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
     private final SchemaFactory schemaFactory =
                         SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
 
-    // Access to this variable is not synchronized.  The list itself is concurrent
-    private final CopyOnWriteArrayList<NamespaceHandlerSetImpl> sets =
-                        new CopyOnWriteArrayList<NamespaceHandlerSetImpl>();
+    // Access to this variable is must be synchronized on itself
+    private final ArrayList<NamespaceHandlerSetImpl> sets =
+                        new ArrayList<NamespaceHandlerSetImpl>();
 
     public NamespaceHandlerRegistryImpl(BundleContext bundleContext) {
         this.bundleContext = bundleContext;
@@ -122,8 +122,13 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
                 LOGGER.warn("Error registering NamespaceHandler", e);
             }
         } else {
-            LOGGER.warn("Error resolving NamespaceHandler, null Service obtained from tracked ServiceReference {} for bundle {}, ver {}",
-                    new Object[] { reference.toString(), reference.getBundle().getSymbolicName(), reference.getBundle().getVersion() });
+            Bundle bundle = reference.getBundle();
+            // If bundle is null, the service has already been unregistered,
+            // so do nothing in that case
+            if (bundle != null) {
+                LOGGER.warn("Error resolving NamespaceHandler, null Service obtained from tracked ServiceReference {} for bundle {}/{}",
+                        reference.toString(), reference.getBundle().getSymbolicName(), reference.getBundle().getVersion());
+            }
         }
         return handler;
     }
@@ -155,6 +160,10 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
                 h = handlers.get(uri);
             }
             if (h.add(handler)) {
+                List<NamespaceHandlerSetImpl> sets;
+                synchronized (this.sets) {
+                    sets = new ArrayList<NamespaceHandlerSetImpl>(this.sets);
+                }
                 for (NamespaceHandlerSetImpl s : sets) {
                     s.registerHandler(uri, handler);
                 }
@@ -168,6 +177,10 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
             CopyOnWriteArraySet<NamespaceHandler> h = handlers.get(uri);
             if (!h.remove(handler)) {
                 continue;
+            }
+            List<NamespaceHandlerSetImpl> sets;
+            synchronized (this.sets) {
+                sets = new ArrayList<NamespaceHandlerSetImpl>(this.sets);
             }
             for (NamespaceHandlerSetImpl s : sets) {
                 s.unregisterHandler(uri, handler);
@@ -226,8 +239,11 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
     }
     
     public NamespaceHandlerSet getNamespaceHandlers(Set<URI> uris, Bundle bundle) {
-        NamespaceHandlerSetImpl s = new NamespaceHandlerSetImpl(uris, bundle);
-        sets.add(s);
+        NamespaceHandlerSetImpl s;
+        synchronized (sets) {
+            s = new NamespaceHandlerSetImpl(uris, bundle);
+            sets.add(s);
+        }
         return s;
     }
 
@@ -237,9 +253,10 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
 
     private Schema getSchema(Map<URI, NamespaceHandler> handlers,
                              final Bundle bundle,
-                             final Properties schemaMap) throws IOException, SAXException {
+                             final Properties schemaMap,
+                             Map<String, String> locations) throws IOException, SAXException {
         if (schemaMap != null && !schemaMap.isEmpty()) {
-            return createSchema(handlers, bundle, schemaMap);
+            return createSchema(handlers, bundle, schemaMap, locations);
         }
         // Find a schema that can handle all the requested namespaces
         // If it contains additional namespaces, it should not be a problem since
@@ -247,7 +264,7 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
         Schema schema = getExistingSchema(handlers);
         if (schema == null) {
             // Create schema
-            schema = createSchema(handlers, bundle, schemaMap);
+            schema = createSchema(handlers, bundle, schemaMap, locations);
             cacheSchema(handlers, schema);
         }
         return schema;
@@ -309,7 +326,8 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
 
     private Schema createSchema(Map<URI, NamespaceHandler> handlers,
                                 Bundle bundle,
-                                Properties schemaMap) throws IOException, SAXException {
+                                Properties schemaMap,
+                                Map<String, String> locations) throws IOException, SAXException {
         final List<StreamSource> schemaSources = new ArrayList<StreamSource>();
         try {
             schemaSources.add(new StreamSource(getClass().getResourceAsStream("/org/apache/aries/blueprint/blueprint.xsd")));
@@ -317,6 +335,12 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
             // It will speed things as it can be reused for all other blueprint containers
             for (URI ns : handlers.keySet()) {
                 URL url = handlers.get(ns).getSchemaLocation(ns.toString());
+                if (url == null && locations != null) {
+                    String loc = locations.get(ns.toString());
+                    if (loc != null) {
+                        url = handlers.get(ns).getSchemaLocation(loc);
+                    }
+                }
                 if (url == null) {
                     LOGGER.warn("No URL is defined for schema " + ns + ". This schema will not be validated");
                 } else {
@@ -332,7 +356,7 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
                 }
             }
             synchronized (schemaFactory) {
-                schemaFactory.setResourceResolver(new BundleResourceResolver(schemaMap, bundle, schemaSources));
+                schemaFactory.setResourceResolver(new BundleResourceResolver(handlers, schemaMap, bundle, schemaSources));
                 return schemaFactory.newSchema(schemaSources.toArray(new Source[schemaSources.size()]));
             }
         } finally {
@@ -353,11 +377,13 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
     }
 
     private class BundleResourceResolver implements LSResourceResolver {
+        private final Map<URI, NamespaceHandler> handlers;
         private final Properties schemaMap;
         private final Bundle bundle;
         private final List<StreamSource> schemaSources;
 
-        public BundleResourceResolver(Properties schemaMap, Bundle bundle, List<StreamSource> schemaSources) {
+        public BundleResourceResolver(Map<URI, NamespaceHandler> handlers, Properties schemaMap, Bundle bundle, List<StreamSource> schemaSources) {
+            this.handlers = handlers;
             this.schemaMap = schemaMap;
             this.bundle = bundle;
             this.schemaSources = schemaSources;
@@ -390,12 +416,7 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
                     }
                 }
             }
-            URI uri = URI.create(namespaceURI);
-            Set<NamespaceHandler> hs = NamespaceHandlerRegistryImpl.this.handlers.get(uri);
-            if (hs == null) {
-                return null;
-            }
-            for (NamespaceHandler h : hs) {
+            for (NamespaceHandler h : handlers.values()) {
                 URL url = h.getSchemaLocation(namespaceURI);
                 if (url != null) {
                     // handling include-relative-path case
@@ -539,11 +560,15 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
         }
 
         public Schema getSchema() throws SAXException, IOException {
+            return getSchema(null);
+        }
+
+        public Schema getSchema(Map<String, String> locations) throws SAXException, IOException {
             if (!isComplete()) {
                 throw new IllegalStateException("NamespaceHandlerSet is not complete");
             }
             if (schema == null) {
-                schema = NamespaceHandlerRegistryImpl.this.getSchema(handlers, bundle, schemaMap);
+                schema = NamespaceHandlerRegistryImpl.this.getSchema(handlers, bundle, schemaMap, locations);
             }
             return schema;
         }
@@ -557,7 +582,9 @@ public class NamespaceHandlerRegistryImpl implements NamespaceHandlerRegistry, S
         }
 
         public void destroy() {
-            NamespaceHandlerRegistryImpl.this.sets.remove(this);
+            synchronized (NamespaceHandlerRegistryImpl.this.sets) {
+                NamespaceHandlerRegistryImpl.this.sets.remove(this);
+            }
         }
 
         public void registerHandler(URI uri, NamespaceHandler handler) {

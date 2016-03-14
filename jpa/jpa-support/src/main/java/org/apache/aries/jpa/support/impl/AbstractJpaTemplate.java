@@ -27,24 +27,31 @@ import org.apache.aries.jpa.template.TransactionType;
 
 public abstract class AbstractJpaTemplate implements JpaTemplate {
 
-	@Override
-	public void tx(final TransactionType type, final EmConsumer code) {
-		txExpr(type, new EmFunction<Object>() {
-			public Object apply(EntityManager em) {
-				code.accept(em);
-				return null;
-			}
-		});
-	}
+    @Override
+    public void tx(final TransactionType type, final EmConsumer code) {
+        txExpr(type, new EmFunction<Object>() {
+            @Override
+            public Object apply(EntityManager em) {
+                code.accept(em);
+                return null;
+            }
+        });
+    }
 
-	@Override
-	public <R> R txExpr(final EmFunction<R> code) {
-		return txExpr(TransactionType.Required, code);
-	}
+    @Override
+    public <R> R txExpr(final EmFunction<R> code) {
+        return txExpr(TransactionType.Required, code);
+    }
 
-	@Override
-	public void tx(final EmConsumer code) {
-		tx(TransactionType.Required, code);
-	}
+    @Override
+    public void tx(final EmConsumer code) {
+        tx(TransactionType.Required, code);
+    }
 
+    protected RuntimeException wrapThrowable(Throwable ex, String message) {
+        if (ex instanceof RuntimeException) {
+            return (RuntimeException) ex;
+        }
+        return new RuntimeException(message, ex);
+    }
 }

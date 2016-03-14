@@ -20,107 +20,114 @@ package org.apache.aries.transaction;
 
 import java.lang.reflect.Method;
 
+import javax.transaction.RollbackException;
 import javax.transaction.Transaction;
 import javax.transaction.TransactionManager;
+import javax.transaction.Transactional.TxType;
 
 import org.apache.aries.blueprint.Interceptor;
-import org.apache.aries.transaction.annotations.TransactionPropagationType;
-import org.apache.aries.transaction.exception.TransactionRollbackException;
 import org.osgi.service.blueprint.reflect.ComponentMetadata;
+import org.osgi.service.coordinator.Coordination;
+import org.osgi.service.coordinator.Coordinator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class TxInterceptorImpl implements Interceptor {
-    private static final Logger LOGGER =
-        LoggerFactory.getLogger(TxInterceptorImpl.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TxInterceptorImpl.class);
 
     private TransactionManager tm;
-    private TxComponentMetaDataHelper metaDataHelper;
+    private Coordinator coordinator;
+    private ComponentTxData txData;
 
-    public int getRank()
-    {
-      // TODO Auto-generated method stub
-      return 0;
+    public TxInterceptorImpl(TransactionManager tm, Coordinator coordinator, ComponentTxData txData) {
+        this.tm = tm;
+        this.coordinator = coordinator;
+        this.txData = txData;
     }
 
-    public void postCallWithException(ComponentMetadata cm, Method m,
-        Throwable ex, Object preCallToken)
-     {
-       if (preCallToken instanceof TransactionToken)
-       {
-         final TransactionToken token = (TransactionToken)preCallToken;
-         try { 
-             Transaction tran = token.getActiveTransaction();
-             if (tran != null) {
-                 if (ex instanceof RuntimeException || ex instanceof Error) {
-                     tran.setRollbackOnly();
-                 } else {
-                     //declared exception, we don't set rollback
-                 }
-             }
-
-             token.getTransactionAttribute().finish(tm, token);
-         }
-         catch (Exception e)
-         {
-           // we do not throw the exception since there already is one, but we need to log it
-           LOGGER.warn(Constants.MESSAGES.getMessage("exception.during.tx.cleanup"), e);
-         }
-       } else {
-         // TODO: what now?
-       }
+    @Override
+    public int getRank() {
+        return 1; // Higher rank than jpa interceptor to make sure transaction is started first
     }
 
-    public void postCallWithReturn(ComponentMetadata cm, Method m,
-        Object returnType, Object preCallToken) throws Exception
-    {
+    @Override
+    public Object preCall(ComponentMetadata cm, Method m, Object... parameters) throws Throwable {
+        final TxType type = txData.getEffectiveType(m);
+        if (type == null) {
+            // No transaction
+            return null;
+        }
+        TransactionAttribute txAttribute = TransactionAttribute.fromValue(type);
+
+        LOGGER.debug("PreCall for bean {}, method {} with tx strategy {}.", getCmId(cm), m.getName(), txAttribute);
+        TransactionToken token = txAttribute.begin(tm);
+        String coordName = "txInterceptor." + m.getDeclaringClass().getName() + "." + m.getName();
+        Coordination coord = coordinator.begin(coordName , 0);
+        token.setCoordination(coord);
+        return token;
+    }
+
+    @Override
+    public void postCallWithException(ComponentMetadata cm, Method m, Throwable ex, Object preCallToken) {
+        if (!(preCallToken instanceof TransactionToken)) {
+            return;
+        }
+        LOGGER.debug("PostCallWithException for bean {}, method {}.", getCmId(cm), m.getName(), ex);
+        final TransactionToken token = (TransactionToken)preCallToken;
+        safeEndCoordination(token);
+        try {
+            Transaction tran = token.getActiveTransaction();
+            if (tran != null && isRollBackException(ex)) {
+                tran.setRollbackOnly();
+                LOGGER.debug("Setting transaction to rollback only because of exception ", ex);
+            }
+            token.getTransactionAttribute().finish(tm, token);
+        } catch (Exception e) {
+            // we do not throw the exception since there already is one, but we need to log it
+            LOGGER.warn("Exception during transaction cleanup", e);
+        }
+    }
+
+    @Override
+    public void postCallWithReturn(ComponentMetadata cm, Method m, Object returnType, Object preCallToken)
+        throws Exception {
+        LOGGER.debug("PostCallWithReturn for bean {}, method {}.", getCmId(cm), m);
         // it is possible transaction is not involved at all
         if (preCallToken == null) {
-            return;          
+            return;
         }
-        
-      if (preCallToken instanceof TransactionToken)
-      {
+        if (!(preCallToken instanceof TransactionToken)) {
+            throw new IllegalStateException("Expected a TransactionToken from preCall but got " + preCallToken);
+        }
         final TransactionToken token = (TransactionToken)preCallToken;
-        try { 
-           token.getTransactionAttribute().finish(tm, token);
+        safeEndCoordination(token);
+        try {
+            token.getTransactionAttribute().finish(tm, token);
+        } catch (Exception e) {
+            // We are throwing an exception, so we don't error it out
+            LOGGER.debug("Exception while completing transaction.", e);
+            RollbackException rbe = new javax.transaction.RollbackException();
+            rbe.addSuppressed(e);
+            throw rbe;
         }
-        catch (Exception e)
-        {
-          // We are throwing an exception, so we don't error it out
-          LOGGER.debug(Constants.MESSAGES.getMessage("exception.during.tx.finish"), e);
-          throw new TransactionRollbackException(e);
+    }
+
+    private void safeEndCoordination(final TransactionToken token) {
+        try {
+            if (token != null && token.getCoordination() != null) {
+                token.getCoordination().end();
+            }
+        } catch (Exception e){
+            LOGGER.debug(e.getMessage(), e);
         }
-      }
-      else {
-        // TODO: what now?
-      }
+    }
+    
+    private static String getCmId(ComponentMetadata cm) {
+        return cm == null ? null : cm.getId();
     }
 
-    public Object preCall(ComponentMetadata cm, Method m,
-        Object... parameters) throws Throwable  {
-      final String methodName = m.getName();
-      final TransactionPropagationType type = metaDataHelper.getComponentMethodTxAttribute(cm, methodName);
-      
-      // attribute could be null here which means no transaction
-      if (type == null) {
-          return null;
-      }
-      TransactionAttribute txAttribute = TransactionAttribute.fromValue(type);
-      
-      if (LOGGER.isDebugEnabled())
-          LOGGER.debug("Method: " + m + ", has transaction strategy: " + txAttribute);
-
-      return txAttribute.begin(tm);
+    private static boolean isRollBackException(Throwable ex) {
+        return ex instanceof RuntimeException || ex instanceof Error;
     }
 
-    public final void setTransactionManager(TransactionManager manager)
-    {
-      tm = manager;
-    }
-
-    public final void setTxMetaDataHelper(TxComponentMetaDataHelper transactionEnhancer)
-    {
-      this.metaDataHelper = transactionEnhancer;
-    }
 }

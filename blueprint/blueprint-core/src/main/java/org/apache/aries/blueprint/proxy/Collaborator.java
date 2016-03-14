@@ -20,8 +20,9 @@ package org.apache.aries.blueprint.proxy;
 
 import java.io.Serializable;
 import java.lang.reflect.Method;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
-import java.util.Stack;
 
 import org.apache.aries.blueprint.Interceptor;
 import org.apache.aries.proxy.InvocationListener;
@@ -62,7 +63,7 @@ public class Collaborator implements InvocationListener, Serializable {
      */
     public Object preInvoke(Object o, Method m, Object[] parameters)
             throws Throwable {
-        Stack<Collaborator.StackElement> stack = new Stack<Collaborator.StackElement>();
+        Deque<StackElement> stack = new ArrayDeque<StackElement>(interceptors.size());
         if (interceptors != null) {
           try{
             for (Interceptor im : interceptors) {
@@ -84,20 +85,12 @@ public class Collaborator implements InvocationListener, Serializable {
 
     /**
      * Called when the method is called and returned normally
-     * 
-     * @param cm
-     *            : component metadata
-     * @param method
-     *            : method
-     * @param returnType
-     *            : return type
-     * @throws Throwable
      */
     public void postInvoke(Object token, Object o, Method method, 
          Object returnType) throws Throwable {
         
-        Stack<Collaborator.StackElement> calledInterceptors = 
-                    (Stack<Collaborator.StackElement>) token;
+        Deque<StackElement> calledInterceptors =
+                    (Deque<StackElement>) token;
         if(calledInterceptors != null) {
             while (!calledInterceptors.isEmpty()) {
                 Collaborator.StackElement se = calledInterceptors.pop();
@@ -116,19 +109,12 @@ public class Collaborator implements InvocationListener, Serializable {
 
     /**
      * Called when the method is called and returned with an exception
-     * 
-     * @param cm
-     *            : component metadata
-     * @param method
-     *            : method
-     * @param exception
-     *            : exception thrown
      */
     public void postInvokeExceptionalReturn(Object token, Object o, Method method,
                  Throwable exception) throws Throwable {
         Throwable tobeRethrown = null;
-        Stack<Collaborator.StackElement> calledInterceptors = 
-          (Stack<Collaborator.StackElement>) token;
+        Deque<StackElement> calledInterceptors =
+          (Deque<StackElement>) token;
         while (!calledInterceptors.isEmpty()) {
             Collaborator.StackElement se = calledInterceptors.pop();
 

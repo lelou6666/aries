@@ -15,6 +15,10 @@ package org.apache.aries.subsystem.core.internal;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+<<<<<<< HEAD
+=======
+import java.security.AccessController;
+>>>>>>> refs/remotes/apache/trunk
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -22,23 +26,48 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
 import org.apache.aries.subsystem.core.internal.BundleResourceInstaller.BundleConstituent;
 import org.apache.aries.subsystem.core.internal.DependencyCalculator.MissingCapability;
+=======
+import org.apache.aries.subsystem.core.archive.ProvisionPolicyDirective;
+import org.apache.aries.subsystem.core.archive.SubsystemManifest;
+import org.apache.aries.subsystem.core.archive.SubsystemTypeHeader;
+import org.apache.aries.subsystem.core.internal.BundleResourceInstaller.BundleConstituent;
+import org.apache.aries.subsystem.core.internal.DependencyCalculator.MissingCapability;
+import org.apache.aries.subsystem.core.internal.StartAction.Restriction;
+>>>>>>> refs/remotes/apache/trunk
 import org.apache.aries.subsystem.core.repository.Repository;
 import org.eclipse.equinox.region.Region;
 import org.osgi.framework.BundleException;
 import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.namespace.ExecutionEnvironmentNamespace;
+<<<<<<< HEAD
 import org.osgi.framework.namespace.IdentityNamespace;
 import org.osgi.framework.namespace.NativeNamespace;
 import org.osgi.framework.wiring.BundleRevision;
+=======
+import org.osgi.framework.namespace.HostNamespace;
+import org.osgi.framework.namespace.IdentityNamespace;
+import org.osgi.framework.namespace.NativeNamespace;
+import org.osgi.framework.namespace.PackageNamespace;
+import org.osgi.framework.wiring.BundleRevision;
+import org.osgi.framework.wiring.BundleWiring;
+>>>>>>> refs/remotes/apache/trunk
 import org.osgi.resource.Capability;
 import org.osgi.resource.Namespace;
 import org.osgi.resource.Requirement;
 import org.osgi.resource.Resource;
+<<<<<<< HEAD
 import org.osgi.resource.Wiring;
 import org.osgi.service.resolver.HostedCapability;
 import org.osgi.service.subsystem.SubsystemException;
+=======
+import org.osgi.resource.Wire;
+import org.osgi.resource.Wiring;
+import org.osgi.service.resolver.HostedCapability;
+import org.osgi.service.subsystem.Subsystem.State;
+>>>>>>> refs/remotes/apache/trunk
 
 public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 	private final Repository contentRepository;
@@ -48,7 +77,11 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 	private final SubsystemResource resource;
 	private final Repository systemRepository;
 	private final Map<Resource, Wiring> wirings = computeWirings();
+<<<<<<< HEAD
 	
+=======
+
+>>>>>>> refs/remotes/apache/trunk
 	public ResolveContext(SubsystemResource resource) {
 		this.resource = resource;
 		contentRepository = new ContentRepository(resource.getInstallableContent(), resource.getSharedContent());
@@ -58,6 +91,7 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 		systemRepository = Activator.getInstance().getSystemRepository();
 	}
 	
+<<<<<<< HEAD
 	@Override
 	public List<Capability> findProviders(Requirement requirement) {
 		ArrayList<Capability> result = new ArrayList<Capability>();
@@ -76,16 +110,148 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 				}
 			}
 			if (result.isEmpty()) {
+=======
+	private void installDependenciesOfRequirerIfNecessary(Requirement requirement) {
+		if (requirement == null) {
+			return;
+		}
+		Resource requirer = requirement.getResource();
+		if (resource.equals(requirer)) {
+			return;
+		}
+		Collection<BasicSubsystem> subsystems;
+		if (requirer instanceof BasicSubsystem) {
+			BasicSubsystem subsystem = (BasicSubsystem)requirer;
+			subsystems = Collections.singletonList(subsystem);
+		}
+		else if (requirer instanceof BundleRevision) {
+			BundleRevision revision = (BundleRevision)requirer;
+			BundleConstituent constituent = new BundleConstituent(null, revision);
+			subsystems = Activator.getInstance().getSubsystems().getSubsystemsByConstituent(constituent);
+		}
+		else {
+			return;
+		}
+		for (BasicSubsystem subsystem : subsystems) {
+			if (Utils.isProvisionDependenciesInstall(subsystem) 
+					|| !State.INSTALLING.equals(subsystem.getState())) {
+				continue;
+			}
+			AccessController.doPrivileged(new StartAction(subsystem, subsystem, subsystem, Restriction.INSTALL_ONLY));
+		}
+	}
+	
+	private boolean isResolved(Resource resource) {
+		return wirings.containsKey(resource);
+	}
+	
+	private boolean isProcessableAsFragment(Requirement requirement) {
+		Resource resource = requirement.getResource();
+		String namespace = requirement.getNamespace();
+		return Utils.isFragment(resource)
+				&& !(ExecutionEnvironmentNamespace.EXECUTION_ENVIRONMENT_NAMESPACE.equals(namespace)
+						|| HostNamespace.HOST_NAMESPACE.equals(namespace));
+	}
+	
+	private void processAsFragment(Requirement requirement, List<Capability> capabilities) {
+		String namespace = requirement.getNamespace();
+		Resource fragment = requirement.getResource();
+		Wiring fragmentWiring = wirings.get(fragment);
+		List<Wire> fragmentWires = fragmentWiring.getRequiredResourceWires(HostNamespace.HOST_NAMESPACE);
+		for (Wire fragmentWire : fragmentWires) {
+			Resource host = fragmentWire.getProvider();
+			Wiring hostWiring = wirings.get(host);
+			List<Wire> hostWires = hostWiring.getRequiredResourceWires(namespace);
+			processWires(hostWires, requirement, capabilities);
+		}
+	}
+	
+	private void processWires(Collection<Wire> wires, Requirement requirement, List<Capability> capabilities) {
+		for (Wire wire : wires) {
+			processWire(wire, requirement, capabilities);
+		}
+	}
+	
+	private void processWire(Wire wire, Requirement requirement, List<Capability> capabilities) {
+		Capability capability = wire.getCapability();
+		processCapability(capability, requirement, capabilities);
+	}
+	
+	private void processCapability(Capability capability, Requirement requirement, List<Capability> capabilities) {
+		if (ResourceHelper.matches(requirement, capability)) {
+			capabilities.add(capability);
+		}
+	}
+	
+	private void processResourceCapabilities(Collection<Capability> resourceCapabilities, Requirement requirement, List<Capability> capabilities) {
+		for (Capability resourceCapability : resourceCapabilities) {
+			processCapability(resourceCapability, requirement, capabilities);
+		}
+	}
+	
+	private void processAsBundle(Requirement requirement, List<Capability> capabilities) {
+		String namespace = requirement.getNamespace();
+		Resource bundle = requirement.getResource();
+		Wiring wiring = wirings.get(bundle);
+		List<Wire> wires = wiring.getRequiredResourceWires(namespace);
+		processWires(wires, requirement, capabilities);
+	}
+	
+	private void processAsSubstitutableExport(Requirement requirement, List<Capability> capabilities) {
+		String namespace = requirement.getNamespace();
+		if (!PackageNamespace.PACKAGE_NAMESPACE.equals(namespace)) {
+			return;
+		}
+		Resource resource = requirement.getResource();
+		Wiring wiring = wirings.get(resource);
+		List<Capability> resourceCapabilities = wiring.getResourceCapabilities(namespace);
+		processResourceCapabilities(resourceCapabilities, requirement, capabilities);
+	}
+	
+	private void processAlreadyResolvedResource(Resource resource, Requirement requirement, List<Capability> capabilities) {
+		if (isProcessableAsFragment(requirement)) {
+			processAsFragment(requirement, capabilities);
+		}
+		else {
+			processAsBundle(requirement, capabilities);
+		}
+		if (capabilities.isEmpty() && Utils.isMandatory(requirement)) {
+			processAsSubstitutableExport(requirement, capabilities);
+		}
+	}
+	
+	private void processNewlyResolvedResource(Resource resource, Requirement requirement, List<Capability> capabilities) {
+		try {
+			// Only check the system repository for osgi.ee and osgi.native
+			if (ExecutionEnvironmentNamespace.EXECUTION_ENVIRONMENT_NAMESPACE.equals(requirement.getNamespace())
+					|| NativeNamespace.NATIVE_NAMESPACE.equals(requirement.getNamespace())) {
+				addDependenciesFromSystemRepository(requirement, capabilities);
+			} else {
+				addDependenciesFromContentRepository(requirement, capabilities);
+				addDependenciesFromPreferredProviderRepository(requirement, capabilities);
+				addDependenciesFromSystemRepository(requirement, capabilities);
+				addDependenciesFromLocalRepository(requirement, capabilities);
+				if (capabilities.isEmpty()) {
+					addDependenciesFromRepositoryServiceRepositories(requirement, capabilities);
+				}
+			}
+			if (capabilities.isEmpty()) {
+>>>>>>> refs/remotes/apache/trunk
 				// Is the requirement optional?
 				String resolution = requirement.getDirectives().get(Namespace.REQUIREMENT_RESOLUTION_DIRECTIVE);
 				if (Namespace.RESOLUTION_OPTIONAL.equals(resolution)) {
 					// Yes, it's optional. Add a missing capability to ensure
 					// it gets added to the sharing policy per the specification.
+<<<<<<< HEAD
 					result.add(new MissingCapability(requirement));
+=======
+					capabilities.add(new MissingCapability(requirement));
+>>>>>>> refs/remotes/apache/trunk
 				}
 			}
 		}
 		catch (Throwable t) {
+<<<<<<< HEAD
 			if (t instanceof SubsystemException)
 				throw (SubsystemException)t;
 			if (t instanceof SecurityException)
@@ -94,34 +260,80 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 		}
 		result.trimToSize();
 		return result;
+=======
+			Utils.handleTrowable(t);
+		}
+	}
+
+	@Override
+	public List<Capability> findProviders(Requirement requirement) {
+		ArrayList<Capability> capabilities = new ArrayList<Capability>();
+		Resource resource = requirement.getResource();
+		if (isResolved(resource)
+				&& Utils.isEffectiveResolve(requirement)) {
+			processAlreadyResolvedResource(resource, requirement, capabilities);
+		}
+		else {
+			installDependenciesOfRequirerIfNecessary(requirement);
+			processNewlyResolvedResource(resource, requirement, capabilities);
+		}
+		capabilities.trimToSize();
+		return capabilities;
+>>>>>>> refs/remotes/apache/trunk
 	}
 
 	@Override
 	public int insertHostedCapability(List<Capability> capabilities, HostedCapability hostedCapability) {
+<<<<<<< HEAD
 		capabilities.add(hostedCapability);
 		return capabilities.size() - 1;
+=======
+	    // Must specify the location where the capability is to be added. From the ResoveContext javadoc:
+	    // "This method must insert the specified HostedCapability in a place that makes the list maintain
+	    // the preference order."
+	    // The Felix implementation provides a list that requires the index to be specified in the add() call,
+	    // otherwise it will throw an exception.
+        int sz = capabilities.size();
+		capabilities.add(sz, hostedCapability);
+        return sz;
+>>>>>>> refs/remotes/apache/trunk
 	}
 
 	@Override
 	public boolean isEffective(Requirement requirement) {
 		return true;
 	}
+<<<<<<< HEAD
 	
+=======
+
+>>>>>>> refs/remotes/apache/trunk
 	@Override
 	public Collection<Resource> getMandatoryResources() {
 		return resource.getMandatoryResources();
 	}
+<<<<<<< HEAD
 	
 	@Override 
+=======
+
+	@Override
+>>>>>>> refs/remotes/apache/trunk
 	public Collection<Resource> getOptionalResources() {
 		return resource.getOptionalResources();
 	}
 
 	@Override
 	public Map<Resource, Wiring> getWirings() {
+<<<<<<< HEAD
 		return wirings;
 	}
 	
+=======
+		return Collections.emptyMap();
+	}
+
+>>>>>>> refs/remotes/apache/trunk
 	private boolean addDependencies(Repository repository, Requirement requirement, List<Capability> capabilities, boolean validate) throws BundleException, IOException, InvalidSyntaxException, URISyntaxException {
 		if (repository == null)
 			return false;
@@ -150,7 +362,12 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 	}
 
 	private boolean addDependenciesFromSystemRepository(Requirement requirement, List<Capability> capabilities) throws BundleException, IOException, InvalidSyntaxException, URISyntaxException {
+<<<<<<< HEAD
 		return addDependencies(systemRepository, requirement, capabilities, true);
+=======
+		boolean result = addDependencies(systemRepository, requirement, capabilities, true);
+		return result;
+>>>>>>> refs/remotes/apache/trunk
 	}
 
 	private void addValidCapabilities(Collection<Capability> from, Collection<Capability> to, Requirement requirement, boolean validate) throws BundleException, IOException, InvalidSyntaxException, URISyntaxException {
@@ -165,6 +382,7 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 	private void addWiring(Resource resource, Map<Resource, Wiring> wirings) {
 		if (resource instanceof BundleConstituent) {
 			BundleConstituent bc = (BundleConstituent)resource;
+<<<<<<< HEAD
 			wirings.put(bc.getBundle().adapt(BundleRevision.class), bc.getWiring());
 		}
 		else if (resource instanceof BundleRevision) {
@@ -173,6 +391,23 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 		}
 	}
 	
+=======
+			BundleWiring wiring = bc.getWiring();
+			if (wiring != null) {
+				wirings.put(bc.getBundle().adapt(BundleRevision.class), wiring);
+			}
+		}
+		else if (resource instanceof BundleRevision) {
+			BundleRevision br = (BundleRevision)resource;
+			BundleWiring wiring = br.getWiring();
+			if (wiring != null) {
+				wirings.put(br, wiring);
+			}
+			
+		}
+	}
+
+>>>>>>> refs/remotes/apache/trunk
 	private Map<Resource, Wiring> computeWirings() {
 		Map<Resource, Wiring> wirings = new HashMap<Resource, Wiring>();
 		for (BasicSubsystem subsystem : Activator.getInstance().getSubsystems().getSubsystems()) { // NEED
@@ -182,14 +417,49 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 		}
 		return Collections.unmodifiableMap(wirings);
 	}
+<<<<<<< HEAD
 
+=======
+	
+	private boolean isContent(Resource resource) {
+		return this.resource.isContent(resource);
+	}
+
+	private boolean isInstallable(Resource resource) {
+		return !isShared(resource);
+	}
+
+	private boolean isShared(Resource resource) {
+		return Utils.isSharedResource(resource);
+	}
+
+	private boolean isValid(Capability capability, Requirement requirement) throws BundleException, IOException, InvalidSyntaxException, URISyntaxException {
+		if (IdentityNamespace.IDENTITY_NAMESPACE.equals(capability.getNamespace()))
+			return true;
+		Region from = findRegionForCapabilityValidation(capability.getResource());
+		Region to = findRegionForCapabilityValidation(requirement.getResource());
+		return new SharingPolicyValidator(from, to).isValid(capability);
+	}
+	
+	private boolean isAcceptDependencies() {
+		SubsystemManifest manifest = resource.getSubsystemManifest();
+		SubsystemTypeHeader header = manifest.getSubsystemTypeHeader();
+		ProvisionPolicyDirective directive = header.getProvisionPolicyDirective();
+		return directive.isAcceptDependencies();
+	}
+	
+>>>>>>> refs/remotes/apache/trunk
 	private Region findRegionForCapabilityValidation(Resource resource) throws BundleException, IOException, InvalidSyntaxException, URISyntaxException {
 		if (isInstallable(resource)) {
 			// This is an installable resource so we need to figure out where it
 			// will be installed.
 			if (isContent(resource) // If the resource is content of this subsystem, it will be installed here.
 					// Or if this subsystem accepts dependencies, the resource will be installed here.
+<<<<<<< HEAD
 					|| this.resource.getSubsystemManifest().getSubsystemTypeHeader().getProvisionPolicyDirective().isAcceptDependencies()) {
+=======
+					|| isAcceptDependencies()) {
+>>>>>>> refs/remotes/apache/trunk
 				if (this.resource.isComposite()) {
 					// Composites define their own sharing policy with which
 					// their regions are already configured by the time we get
@@ -198,6 +468,7 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 				}
 				// For applications and features, we must ensure capabilities
 				// are visible to their scoped parent. Features import
+<<<<<<< HEAD
 				// everything. Applications have their sharing policies 
 				// computed, so if capabilities are visible to the parent, we
 				// know we can make them visible to the application.
@@ -206,11 +477,29 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 			// Same reasoning as above applies here.
 			if (this.resource.isComposite() && this.resource.getSubsystemManifest().getSubsystemTypeHeader().getProvisionPolicyDirective().isAcceptDependencies()) {
 				 return this.resource.getRegion();
+=======
+				// everything. Applications have their sharing policies
+				// computed, so if capabilities are visible to the parent, we
+				// know we can make them visible to the application. 
+				BasicSubsystem parent = this.resource.getParents().iterator().next();
+				// If the parent accepts dependencies, the resource will 
+				// be installed there and all capabilities will be visible.
+				if (parent.getSubsystemManifest().getSubsystemTypeHeader().getProvisionPolicyDirective().isAcceptDependencies()) {
+					return parent.getRegion();
+				}
+				// Otherwise, the "parent" is defined as the first scoped 
+				// ancestor whose sharing policy has already been set. This 
+				// covers the case of multiple subsystems from the same archive 
+				// being installed whose regions will form a tree of depth N.
+				parent = Utils.findFirstScopedAncestorWithSharingPolicy(this.resource);
+				return parent.getRegion();
+>>>>>>> refs/remotes/apache/trunk
 			}
 			return Utils.findFirstSubsystemAcceptingDependenciesStartingFrom(this.resource.getParents().iterator().next()).getRegion();
 		}
 		else {
 			// This is an already installed resource from the system repository.
+<<<<<<< HEAD
 			if (Utils.isBundle(resource))
 				// If it's a bundle, use region digraph to get the region in order
 				// to account for bundles in isolated regions outside of the
@@ -242,4 +531,34 @@ public class ResolveContext extends org.osgi.service.resolver.ResolveContext {
 		Region to = findRegionForCapabilityValidation(requirement.getResource());
 		return new SharingPolicyValidator(from, to).isValid(capability);
 	}
+=======
+			if (Utils.isBundle(resource)) {
+				if (isContent(resource) 
+						&& this.resource.getSubsystemManifest().getSubsystemTypeHeader().getAriesProvisionDependenciesDirective().isResolve()) {
+					// If we get here with a subsystem that is 
+					// apache-aries-provision-dependencies:=resolve, it means
+					// that a restart has occurred with the subsystem in the
+					// INSTALLING state. Its content has already been installed.
+					// However, because the sharing policy has not yet been set,
+					// we must treat it similarly to the installable content case
+					// above.
+					return Utils.findFirstScopedAncestorWithSharingPolicy(this.resource).getRegion();
+				}
+			    BundleRevision revision = resource instanceof BundleRevision ? (BundleRevision)resource : ((BundleRevisionResource)resource).getRevision();
+				// If it's a bundle, use region digraph to get the region in order
+				// to account for bundles in isolated regions outside of the
+				// subsystems API.
+				return Activator.getInstance().getRegionDigraph().getRegion(revision.getBundle());
+			}
+			else {
+				if (this.resource.getSubsystemManifest().getSubsystemTypeHeader().getAriesProvisionDependenciesDirective().isResolve()) {
+					return Utils.findFirstScopedAncestorWithSharingPolicy(this.resource).getRegion();
+				}
+				// If it's anything else, get the region from one of the
+				// subsystems referencing it.
+				return Activator.getInstance().getSubsystems().getSubsystemsReferencing(resource).iterator().next().getRegion();
+			}
+		}
+	}
+>>>>>>> refs/remotes/apache/trunk
 }

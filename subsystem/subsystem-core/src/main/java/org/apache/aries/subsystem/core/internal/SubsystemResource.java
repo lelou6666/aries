@@ -1,15 +1,20 @@
 /*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.aries.subsystem.core.internal;
 
@@ -23,6 +28,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.aries.subsystem.core.archive.AriesSubsystemParentsHeader;
 import org.apache.aries.subsystem.core.archive.Attribute;
 import org.apache.aries.subsystem.core.archive.DeployedContentHeader;
 import org.apache.aries.subsystem.core.archive.DeploymentManifest;
@@ -41,17 +47,13 @@ import org.apache.aries.subsystem.core.archive.SubsystemImportServiceRequirement
 import org.apache.aries.subsystem.core.archive.SubsystemManifest;
 import org.apache.aries.util.filesystem.FileSystem;
 import org.apache.aries.util.filesystem.IDirectory;
-import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.eclipse.equinox.region.Region;
 import org.eclipse.equinox.region.RegionDigraph;
 import org.eclipse.equinox.region.RegionFilter;
 import org.eclipse.equinox.region.RegionFilterBuilder;
 import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
 import org.osgi.framework.InvalidSyntaxException;
-import org.osgi.framework.ServiceReference;
-import org.osgi.framework.hooks.weaving.WeavingHook;
 import org.osgi.framework.namespace.ExecutionEnvironmentNamespace;
 import org.osgi.framework.namespace.IdentityNamespace;
 import org.osgi.framework.namespace.NativeNamespace;
@@ -85,30 +87,43 @@ public class SubsystemResource implements Resource {
 	private final Collection<Resource> sharedContent = new HashSet<Resource>();
 	private final Collection<Resource> sharedDependencies = new HashSet<Resource>();
 
-	public SubsystemResource(String location, IDirectory content, BasicSubsystem parent) throws URISyntaxException, IOException, ResolutionException, BundleException, InvalidSyntaxException {
-		this(new RawSubsystemResource(location, content, parent), parent);
+	public SubsystemResource(String location, IDirectory content, BasicSubsystem parent, Coordination coordination) throws URISyntaxException, IOException, ResolutionException, BundleException, InvalidSyntaxException {
+		this(new RawSubsystemResource(location, content, parent), parent, coordination);
 	}
 
-	public SubsystemResource(RawSubsystemResource resource, BasicSubsystem parent) throws IOException, BundleException, InvalidSyntaxException, URISyntaxException {
+	public SubsystemResource(RawSubsystemResource resource, BasicSubsystem parent, Coordination coordination) throws IOException, BundleException, InvalidSyntaxException, URISyntaxException {
 		this.parent = parent;
 		this.resource = resource;
 		computeContentResources(resource.getDeploymentManifest());
 		capabilities = computeCapabilities();
-		computeDependencies(resource.getDeploymentManifest());
+		if (this.getSubsystemManifest().getSubsystemTypeHeader().getAriesProvisionDependenciesDirective().isInstall()) {
+		    /* compute dependencies now only if we intend to provision them during install */
+	        computeDependencies(resource.getDeploymentManifest(), coordination);		    
+		}
 		deploymentManifest = computeDeploymentManifest();
 	}
 
 	public SubsystemResource(File file) throws IOException, URISyntaxException, ResolutionException, BundleException, InvalidSyntaxException {
-		this(FileSystem.getFSRoot(file));
+		this(null, FileSystem.getFSRoot(file));
 	}
 
-	public SubsystemResource(IDirectory directory) throws IOException, URISyntaxException, ResolutionException, BundleException, InvalidSyntaxException {
-		parent = null;
+	public SubsystemResource(BasicSubsystem subsystem, IDirectory directory) throws IOException, URISyntaxException, ResolutionException, BundleException, InvalidSyntaxException {
+		if (subsystem == null) {
+			// This is intended to only support the case where the root subsystem
+			// is being initialized from a non-persistent state.
+			parent = null;
+		}
+		else {
+			parent = Utils.findScopedSubsystemInRegion(subsystem);
+		}
 		resource = new RawSubsystemResource(directory, parent);
 		deploymentManifest = resource.getDeploymentManifest();
 		computeContentResources(deploymentManifest);
 		capabilities = computeCapabilities();
-		computeDependencies(deploymentManifest);
+        if (getSubsystemManifest().getSubsystemTypeHeader().getAriesProvisionDependenciesDirective().isInstall()) {
+            /* compute dependencies if we intend to provision them during install */
+            computeDependencies(resource.getDeploymentManifest(), null);          
+        }
 	}
 
 	@Override
@@ -192,13 +207,15 @@ public class SubsystemResource implements Resource {
 	
 	public Collection<BasicSubsystem> getParents() {
 		if (parent == null) {
-			Header<?> header = getDeploymentManifest().getHeaders().get(DeploymentManifest.ARIESSUBSYSTEM_PARENTS);
+			AriesSubsystemParentsHeader header = getDeploymentManifest().getAriesSubsystemParentsHeader();
 			if (header == null)
 				return Collections.emptyList();
-			String[] parentIds = header.getValue().split(",");
-			Collection<BasicSubsystem> result = new ArrayList<BasicSubsystem>(parentIds.length);
-			for (String parentId : parentIds)
-				result.add(Activator.getInstance().getSubsystems().getSubsystemById(Long.valueOf(parentId)));
+			Collection<AriesSubsystemParentsHeader.Clause> clauses = header.getClauses();
+			Collection<BasicSubsystem> result = new ArrayList<BasicSubsystem>(clauses.size());
+			Subsystems subsystems = Activator.getInstance().getSubsystems();
+			for (AriesSubsystemParentsHeader.Clause clause : clauses) {
+				result.add(subsystems.getSubsystemById(clause.getId()));
+			}
 			return result;
 		}
 		return Collections.singleton(parent);
@@ -277,6 +294,7 @@ public class SubsystemResource implements Resource {
 			sharedContent.add(resource);
 	}
 
+<<<<<<< HEAD
 	private void addDependency(Resource resource) {
 		if (resource == null)
 			return;
@@ -286,6 +304,8 @@ public class SubsystemResource implements Resource {
 			sharedDependencies.add(resource);
 	}
 
+=======
+>>>>>>> refs/remotes/apache/trunk
 	private void addMissingResource(DeployedContentHeader.Clause resource) {
 		missingResources.add(resource);
 	}
@@ -350,27 +370,46 @@ public class SubsystemResource implements Resource {
 		}
 	}
 
-	private void computeDependencies(DeploymentManifest manifest) {
-		if (manifest == null)
-			computeDependencies(getSubsystemManifest());
-		else {
-			ProvisionResourceHeader header = manifest.getProvisionResourceHeader();
-			if (header == null)
-				return;
-			for (ProvisionResourceHeader.Clause clause : header.getClauses()) {
-				Resource resource = findDependency(clause);
-				if (resource == null)
-					throw new SubsystemException("A required dependency could not be found. This means the resource was either missing or not recognized as a supported resource format due to, for example, an invalid bundle manifest or blueprint XML file. Turn on debug logging for more information. The resource was: " + resource);
-				addDependency(resource);
-			}
-		}
+	void computeDependencies(DeploymentManifest manifest, Coordination coordination) {
+	    if (manifest == null) {
+	        computeDependencies(getSubsystemManifest(), coordination);
+	    }
+	    else {
+	        ProvisionResourceHeader header = manifest.getProvisionResourceHeader();
+	        if (header == null)
+	            return;
+	        for (ProvisionResourceHeader.Clause clause : header.getClauses()) {
+	            Resource resource = findDependency(clause);
+	            if (resource == null)
+	                throw new SubsystemException("A required dependency could not be found. This means the resource was either missing or not recognized as a supported resource format due to, for example, an invalid bundle manifest or blueprint XML file. Turn on debug logging for more information. The resource was: " + resource);
+	            addDependency(resource);
+	        }
+	    }
+	}
+	
+	private void addDependency(Resource resource) {
+		if (resource == null)
+			return;
+		if (isInstallable(resource))
+			installableDependencies.add(resource);
+		else
+			sharedDependencies.add(resource);
 	}
 
+<<<<<<< HEAD
 	private void computeDependencies(SubsystemManifest manifest)  {
 		SubsystemContentHeader contentHeader = manifest.getSubsystemContentHeader();
+=======
+	private void computeDependencies(SubsystemManifest manifest, Coordination coordination)  {
+>>>>>>> refs/remotes/apache/trunk
 		try {
+			// The following line is necessary in order to ensure that the
+			// export sharing policies of composites are in place for capability
+			// validation.
+			StartAction.setExportPolicyOfAllInstallingSubsystemsWithProvisionDependenciesResolve(coordination);
 			Map<Resource, List<Wire>> resolution = Activator.getInstance().getResolver().resolve(createResolveContext());
 			setImportIsolationPolicy(resolution);
+<<<<<<< HEAD
 			for (Map.Entry<Resource, List<Wire>> entry : resolution.entrySet()) {
 				Resource key = entry.getKey();
 				if (!contentHeader.contains(key)) {
@@ -383,9 +422,31 @@ public class SubsystemResource implements Resource {
 					}
 				}
 			}
+=======
+			addDependencies(resolution);
 		}
-		catch (ResolutionException e) {
-			throw new SubsystemException(e);
+		catch (Exception e) {
+			Utils.handleTrowable(e);
+>>>>>>> refs/remotes/apache/trunk
+		}
+	}
+	
+	private void addDependencies(Map<Resource, List<Wire>> resolution) {
+		for (Map.Entry<Resource, List<Wire>> entry : resolution.entrySet()) {
+			addDependencies(entry, resolution);
+		}
+	}
+	
+	private void addDependencies(Map.Entry<Resource, List<Wire>> entry, Map<Resource, List<Wire>> resolution) {
+		addDependencies(entry.getKey(), entry, resolution);
+	}
+	
+	private void addDependencies(Resource resource, Map.Entry<Resource, List<Wire>> entry, Map<Resource, List<Wire>> resolution) {
+		String type = ResourceHelper.getTypeAttribute(resource);
+		SubsystemContentHeader contentHeader = getSubsystemManifest().getSubsystemContentHeader();
+		if (!Constants.ResourceTypeSynthesized.equals(type) // Do not include synthetic resources as dependencies.
+				&& !contentHeader.contains(resource)) { // Do not include content as dependencies.
+			addDependency(resource);
 		}
 		catch (Exception e) {
 			if (e instanceof SubsystemException) {
@@ -419,8 +480,8 @@ public class SubsystemResource implements Resource {
 		return resource.getDeploymentManifest();
 	}
 
-	private ProvisionResourceHeader computeProvisionResourceHeader() {
-		Collection<Resource> dependencies = getDepedencies();
+	ProvisionResourceHeader computeProvisionResourceHeader() {
+		Collection<Resource> dependencies = getDependencies();
 		if (dependencies.isEmpty())
 			return null;
 		return ProvisionResourceHeader.newInstance(dependencies);
@@ -478,16 +539,27 @@ public class SubsystemResource implements Resource {
 				}
 			}
 		}
+		// First search the local repository.
 		map = resource.getLocalRepository().findProviders(Collections.singleton(requirement));
-		if (map.containsKey(requirement)) {
-			Collection<Capability> capabilities = map.get(requirement);
-			if (!capabilities.isEmpty())
-				return capabilities.iterator().next().getResource();
+		Collection<Capability> capabilities = map.get(requirement);
+		if (capabilities.isEmpty()) {
+			// Nothing found in the local repository so search the repository services.
+			capabilities = new RepositoryServiceRepository().findProviders(requirement);
 		}
-		Collection<Capability> capabilities = new RepositoryServiceRepository().findProviders(requirement);
-		if (!capabilities.isEmpty())
-			return capabilities.iterator().next().getResource();
-		return null;
+		if (capabilities.isEmpty()) {
+			// Nothing found period.
+			return null;
+		}
+		for (Capability capability : capabilities) {
+			if (!IdentityNamespace.TYPE_FRAGMENT.equals(
+					capability.getAttributes().get(IdentityNamespace.CAPABILITY_TYPE_ATTRIBUTE))) {
+				// Favor the first resource that is not a fragment bundle.
+				// See ARIES-1425.
+				return capability.getResource();
+			}
+		}
+		// Nothing here but fragment bundles. Return the first one.
+		return capabilities.iterator().next().getResource();
 	}
 
 	private Resource findContent(DeployedContentHeader.Clause clause) throws BundleException, IOException, InvalidSyntaxException, URISyntaxException {
@@ -533,7 +605,7 @@ public class SubsystemResource implements Resource {
 		return result;
 	}
 
-	private Collection<Resource> getDepedencies() {
+	private Collection<Resource> getDependencies() {
 		Collection<Resource> result = new ArrayList<Resource>(installableDependencies.size() + sharedDependencies.size());
 		result.addAll(installableDependencies);
 		result.addAll(sharedDependencies);
@@ -550,6 +622,28 @@ public class SubsystemResource implements Resource {
 		return SubsystemConstants.SUBSYSTEM_TYPE_COMPOSITE.equals(type);
 	}
 	
+<<<<<<< HEAD
+=======
+	boolean isContent(Resource resource) {
+		if (installableContent.contains(resource) || sharedContent.contains(resource)) {
+			return true;
+		}
+		// Allow for implicit subsystem installations. An implicit installation
+		// occurs when a subsystem containing other subsystems as content is
+		// installed. When identifying the region to be used for validation
+		// purposes during resolution, resources that are content of children
+		// must be treated as content of this subsystem. See ResolveContext.isValid().
+		for (Resource installableResource : installableContent) {
+			if (installableResource instanceof RawSubsystemResource) {
+				if (((RawSubsystemResource)installableResource).getSubsystemManifest().getSubsystemContentHeader().contains(resource)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	
+>>>>>>> refs/remotes/apache/trunk
 	private boolean isInstallable(Resource resource) {
 		return !isShared(resource);
 	}
@@ -594,6 +688,7 @@ public class SubsystemResource implements Resource {
 			List<Wire> wires = resolution.get(resource);
 			for (Wire wire : wires) {
 				Resource provider = wire.getProvider();
+<<<<<<< HEAD
 				if (contentHeader.contains(provider)) {
 					// The provider is content so the requirement does
 					// not need to become part of the sharing policy.
@@ -614,6 +709,43 @@ public class SubsystemResource implements Resource {
 				}
 				else {
 					builder.allow(namespace, filter);
+=======
+				// First check: If the provider is content there is no need to
+				// update the sharing policy because the capability is already
+				// visible.
+				if (contentHeader.contains(provider)) {
+					continue;
+				}
+				// Second check: If the provider is synthesized but not offering
+				// a MissingCapability, then the resource is acting as a
+				// placeholder as part of the Application-ImportService header
+				// functionality, and the sharing policy does not need to be
+				// updated.
+				// Do not exclude resources providing a MissingCapability
+				// even though they are synthesized. These are added by the
+				// resolve context to ensure that unsatisfied optional
+				// requirements become part of the sharing policy.
+				if (!(wire.getCapability() instanceof DependencyCalculator.MissingCapability)
+						&& Constants.ResourceTypeSynthesized.equals(ResourceHelper.getTypeAttribute(provider))) {
+					continue;
+				}
+				// The requirement must be added to the sharing policy.
+				Requirement requirement = wire.getRequirement();
+				List<String> namespaces = new ArrayList<String>(2);
+				namespaces.add(requirement.getNamespace());
+				if (ServiceNamespace.SERVICE_NAMESPACE.equals(namespaces.get(0))) {
+					// Both service capabilities and services must be visible.
+					namespaces.add(RegionFilter.VISIBLE_SERVICE_NAMESPACE);
+				}
+				String filter = requirement.getDirectives().get(Namespace.REQUIREMENT_FILTER_DIRECTIVE);
+				if (filter == null) {
+					for (String namespace : namespaces)
+						builder.allowAll(namespace);
+				}
+				else {
+					for (String namespace : namespaces)
+						builder.allow(namespace, filter);
+>>>>>>> refs/remotes/apache/trunk
 				}
 			}
 		}

@@ -30,7 +30,7 @@
 
     <groupId>org.apache.aries.versioning</groupId>
     <artifactId>org.apache.aries.versioning.plugin</artifactId>
-    <version>0.3.1-SNAPSHOT</version>
+    <version>0.3.2-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
     <name>org.apache.aries.versioning.plugin Maven Mojo</name>
 
@@ -39,12 +39,12 @@
         <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/versioning/versioning-plugin</developerConnection>
         <url>http://svn.apache.org/viewvc/aries/trunk/versioning/versioning-plugin</url>
     </scm>
-
+    
     <dependencies>
         <dependency>
             <groupId>org.apache.aries.versioning</groupId>
             <artifactId>org.apache.aries.versioning.checker</artifactId>
-            <version>0.3.1-SNAPSHOT</version>
+            <version>0.3.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.ow2.asm</groupId>
@@ -125,6 +125,10 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>2.5.2</version>
             </plugin>
         </plugins>
     </build>

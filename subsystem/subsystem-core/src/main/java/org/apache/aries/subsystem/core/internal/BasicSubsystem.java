@@ -32,17 +32,24 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.aries.subsystem.AriesSubsystem;
+import org.apache.aries.subsystem.core.archive.AriesProvisionDependenciesDirective;
 import org.apache.aries.subsystem.core.archive.AriesSubsystemParentsHeader;
 import org.apache.aries.subsystem.core.archive.DeployedContentHeader;
 import org.apache.aries.subsystem.core.archive.DeploymentManifest;
 import org.apache.aries.subsystem.core.archive.Header;
+import org.apache.aries.subsystem.core.archive.ProvisionResourceHeader;
 import org.apache.aries.subsystem.core.archive.SubsystemContentHeader;
 import org.apache.aries.subsystem.core.archive.SubsystemManifest;
+import org.apache.aries.subsystem.core.archive.SubsystemTypeHeader;
 import org.apache.aries.util.filesystem.FileSystem;
+import org.apache.aries.util.filesystem.ICloseableDirectory;
 import org.apache.aries.util.filesystem.IDirectory;
 import org.apache.aries.util.io.IOUtils;
+import org.eclipse.equinox.region.Region;
+import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
 import org.osgi.framework.InvalidSyntaxException;
@@ -70,7 +77,9 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 			+ ROOT_SYMBOLIC_NAME + '&' + SubsystemConstants.SUBSYSTEM_VERSION
 			+ '=' + ROOT_VERSION;
 	
-	private DeploymentManifest deploymentManifest;
+	private volatile Bundle regionContextBundle;
+	
+	private DeploymentManifest deploymentManifest;    
 	private SubsystemResource resource;
 	private SubsystemManifest subsystemManifest;
 	
@@ -118,9 +127,20 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 		this(FileSystem.getFSRoot(file));
 	}
 	
-	public BasicSubsystem(IDirectory directory) throws IOException, URISyntaxException, ResolutionException {
+	public BasicSubsystem(IDirectory directory) throws IOException,
+			URISyntaxException, ResolutionException {
 		this.directory = directory;
-		setDeploymentManifest(new DeploymentManifest.Builder().manifest(getDeploymentManifest()).build());
+		State state = State
+				.valueOf(getDeploymentManifestHeaderValue(DeploymentManifest.ARIESSUBSYSTEM_STATE));
+		if (EnumSet.of(State.STARTING, State.ACTIVE, State.STOPPING).contains(
+				state)) {
+			state = State.RESOLVED;
+		}
+		else if (State.RESOLVING.equals(state)) {
+			state = State.INSTALLED;
+		}
+		setDeploymentManifest(new DeploymentManifest.Builder()
+				.manifest(getDeploymentManifest()).state(state).build());
 	}
 	
 	/* BEGIN Resource interface methods. */
@@ -137,40 +157,113 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 	
 	@Override
 	public List<Capability> getCapabilities(String namespace) {
+		// First, add the capabilities from the manifest.
 		SubsystemManifest manifest = getSubsystemManifest();
 		List<Capability> result = manifest.toCapabilities(this);
-		if (namespace != null)
-			for (Iterator<Capability> i = result.iterator(); i.hasNext();)
-				if (!i.next().getNamespace().equals(namespace))
+		if (namespace != null) {
+			for (Iterator<Capability> i = result.iterator(); i.hasNext();) {
+				if (!i.next().getNamespace().equals(namespace)) {
 					i.remove();
-		// TODO Somehow, exposing the capabilities of content resources of a
-		// feature is causing an infinite regression of feature2 installations
-		// in FeatureTest.testSharedContent() under certain conditions.
-		if (isScoped() || IdentityNamespace.IDENTITY_NAMESPACE.equals(namespace))
+				}
+			}
+		}
+		if (isScoped() || IdentityNamespace.IDENTITY_NAMESPACE.equals(namespace)) {
+			// Scoped subsystems have all capabilities explicitly declared in
+			// their manifests. Also, we do not want to include the osgi.identity
+			// capabilities of content since a resource must have zero or one
+			// osgi.identity capabilities.
 			return result;
-		SubsystemContentHeader header = manifest.getSubsystemContentHeader();
-		for (Resource constituent : getConstituents())
-			if (header.contains(constituent))
-				for (Capability capability : constituent.getCapabilities(namespace))
-					result.add(new BasicCapability(capability, this));
+		}
+		// This is an unscoped subsystem that implicitly exports everything.
+		// Its capabilities must be derived from its content.
+		if (resource == null) {
+			// This is a persisted subsystem. We no longer have access to the
+			// original content. We must look at constituents that are also 
+			// content.
+			SubsystemContentHeader header = manifest.getSubsystemContentHeader();
+			for (Resource constituent : getConstituents()) {
+				if (header.contains(constituent)) {
+					for (Capability capability : constituent.getCapabilities(namespace)) {
+						if (namespace == null && IdentityNamespace.IDENTITY_NAMESPACE.equals(capability.getNamespace())) {
+							// Don't want to include the osgi.identity capabilities of
+							// content. Need a second check here in case the namespace
+							// is null.
+							continue;
+						}
+						result.add(new BasicCapability(capability, this));
+					}
+				}
+			}
+			return result;
+		}
+		// This is a newly installing subsystem. We therefore have access to the
+		// original content via the SubsystemResource and can derive the
+		// capabilities from there.
+		Collection<Resource> installableContent = resource.getInstallableContent();
+		Collection<Resource> sharedContent = resource.getSharedContent();
+		Collection<Resource> contents = new ArrayList<Resource>(installableContent.size() + sharedContent.size());
+		contents.addAll(installableContent);
+		contents.addAll(sharedContent);
+		for (Resource content : contents) {
+			for (Capability capability : content.getCapabilities(namespace)) {
+				if (namespace == null && IdentityNamespace.IDENTITY_NAMESPACE.equals(capability.getNamespace())) {
+					// Don't want to include the osgi.identity capabilities of
+					// content. Need a second check here in case the namespace
+					// is null.
+					continue;
+				}
+				result.add(new BasicCapability(capability, this));
+			}
+		}
 		return result;
 	}
 
 	@Override
 	public List<Requirement> getRequirements(String namespace) {
+		// First, add the requirements from the manifest.
 		SubsystemManifest manifest = getSubsystemManifest();
 		List<Requirement> result = manifest.toRequirements(this);
-		if (namespace != null)
-			for (Iterator<Requirement> i = result.iterator(); i.hasNext();)
-				if (!i.next().getNamespace().equals(namespace))
+		if (namespace != null) {
+			for (Iterator<Requirement> i = result.iterator(); i.hasNext();) {
+				if (!i.next().getNamespace().equals(namespace)) {
 					i.remove();
-		if (isScoped())
+				}
+			}
+		}
+		if (isScoped()) {
+			// Scoped subsystems have all requirements explicitly declared in
+			// their manifests.
 			return result;
-		SubsystemContentHeader header = manifest.getSubsystemContentHeader();
-		for (Resource constituent : getConstituents())
-			if (header.contains(constituent))
-				for (Requirement requirement : constituent.getRequirements(namespace))
-					result.add(new BasicRequirement(requirement, this));
+		}
+		// This is an unscoped subsystem that implicitly imports everything.
+		// Its requirements must be derived from its content.
+		if (resource == null) {
+			// This is a persisted subsystem. We no longer have access to the
+			// original content. We must look at constituents that are also 
+			// content.
+			SubsystemContentHeader header = manifest.getSubsystemContentHeader();
+			for (Resource constituent : getConstituents()) {
+				if (header.contains(constituent)) {
+					for (Requirement requirement : constituent.getRequirements(namespace)) {
+						result.add(new BasicRequirement(requirement, this));
+					}
+				}
+			}
+			return result;
+		}
+		// This is a newly installing subsystem. We therefore have access to the
+		// original content via the SubsystemResource and can derive the
+		// requirements from there.
+		Collection<Resource> installableContent = resource.getInstallableContent();
+		Collection<Resource> sharedContent = resource.getSharedContent();
+		Collection<Resource> contents = new ArrayList<Resource>(installableContent.size() + sharedContent.size());
+		contents.addAll(installableContent);
+		contents.addAll(sharedContent);
+		for (Resource content : contents) {
+			for (Requirement requirement : content.getRequirements(namespace)) {
+				result.add(new BasicRequirement(requirement, this));
+			}
+		}
 		return result;
 	}
 	
@@ -253,6 +346,15 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 		return getSubsystemManifest().getSubsystemVersionHeader().getVersion();
 	}
 
+    /** Get "aries-provision-dependencies" directive. 
+     * 
+     * @return requested directive or null if the directive is not specified in the header
+     */
+	public AriesProvisionDependenciesDirective getAriesProvisionDependenciesDirective() {
+        return getSubsystemManifest().getSubsystemTypeHeader().getAriesProvisionDependenciesDirective();
+    }
+	
+	
 	@Override
 	public AriesSubsystem install(String location) {
 		return install(location, (InputStream)null);
@@ -267,8 +369,8 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 	public void start() {
 		SecurityManager.checkExecutePermission(this);
 		// Changing the autostart setting must be privileged because of file IO.
-		// It cannot be done within SartAction because we only want to change it
-		// on an explicit start operation but StartAction is also used for
+		// It cannot be done within StartAction because we only want to change 
+		// it on an explicit start operation but StartAction is also used for
 		// implicit operations.
 		AccessController.doPrivileged(new PrivilegedAction<Object>() {
 			@Override
@@ -356,8 +458,15 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 		}
 	}
 	
-	org.eclipse.equinox.region.Region getRegion() {
-		return Activator.getInstance().getRegionDigraph().getRegion(getRegionName());
+	Region getRegion() {
+	    Bundle bundle = regionContextBundle; // volatile variable
+	    if (bundle == null) {
+	        // At best, RegionDigraph.getRegion(String) is linear time.
+	        // Continue to call this when necessary, however, as a fail safe.
+	        return Activator.getInstance().getRegionDigraph().getRegion(getRegionName());
+	    }
+	    // RegionDigraph.getRegion(Bundle) is constant time.
+	    return Activator.getInstance().getRegionDigraph().getRegion(bundle);
 	}
 	
 	String getRegionName() {
@@ -371,7 +480,7 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 	synchronized SubsystemResource getResource() {
 		if (resource == null) {
 			try {
-				resource = new SubsystemResource(directory);
+				resource = new SubsystemResource(null, directory);
 			}
 			catch (Exception e) {
 				throw new SubsystemException(e);
@@ -568,6 +677,10 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 		}
 	}
 	
+	void setRegionContextBundle(Bundle value) {
+	    regionContextBundle = value; // volatile variable
+	}
+	
 	synchronized void setSubsystemManifest(SubsystemManifest value) throws URISyntaxException, IOException {
 		File file = new File(getDirectory(), "OSGI-INF");
 		if (!file.exists())
@@ -580,6 +693,11 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 		finally {
 			IOUtils.close(fos);
 		}
+	}
+	
+	private final ReentrantLock stateChangeLock = new ReentrantLock();
+	ReentrantLock stateChangeLock() {
+		return stateChangeLock;
 	}
 	
 	private String getDeploymentManifestHeaderValue(String name) {
@@ -660,19 +778,62 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 
 	@Override
 	public AriesSubsystem install(String location, final InputStream content, InputStream deploymentManifest) {
+<<<<<<< HEAD
 		try {
 			return install(location, content == null ? null : 
+=======
+		AriesSubsystem result = null;
+		IDirectory directory = null;
+		try {
+			directory = content == null ? null : 
+>>>>>>> refs/remotes/apache/trunk
 				AccessController.doPrivileged(new PrivilegedAction<IDirectory>() {
 					@Override
 					public IDirectory run() {
 						return FileSystem.getFSRoot(content);
 					}
+<<<<<<< HEAD
 				}),
 				deploymentManifest);
 		}
 		finally {
 			// This method must guarantee the content input stream was closed.
 			IOUtils.close(content);
+=======
+				});
+			result = install(location, directory, deploymentManifest);
+			return result;
+		}
+		finally {
+			// This method must guarantee the content input stream was closed.
+			// TODO Not sure closing the content is necessary. The content will
+			// either be null of will have been closed while copying the data
+			// to the temporary file.
+			IOUtils.close(content);
+			// If appropriate, delete the temporary file. Subsystems having
+			// apache-aries-provision-dependencies:=resolve may need the file
+			// at start time if it contains any dependencies.
+			if (directory instanceof ICloseableDirectory) {
+				if (result == null
+						|| Utils.isProvisionDependenciesInstall((BasicSubsystem)result)
+						|| !wasInstalledWithChildrenHavingProvisionDependenciesResolve()) {
+					final IDirectory toClose = directory;
+					AccessController.doPrivileged(new PrivilegedAction<Void>() {
+						@Override
+						public Void run() {
+							try {
+								((ICloseableDirectory) toClose).close();
+							}
+							catch (IOException ioex) {
+								logger.info("Exception calling close for content {}. Exception {}", 
+										content, ioex);					
+							}
+							return null;
+						}
+					});
+				}
+			}
+>>>>>>> refs/remotes/apache/trunk
 		}
 	}
 	
@@ -685,4 +846,67 @@ public class BasicSubsystem implements Resource, AriesSubsystem {
 			translation.write(file);
 		}
 	}
+<<<<<<< HEAD
+=======
+	
+	void computeDependenciesPostInstallation(Coordination coordination) throws IOException {
+		resource.computeDependencies(null, coordination);
+		ProvisionResourceHeader header = resource.computeProvisionResourceHeader();
+		setDeploymentManifest(
+				new DeploymentManifest.Builder()
+						.manifest(deploymentManifest)
+						.header(header)
+						.build());
+	}
+	
+	private boolean wasInstalledWithChildrenHavingProvisionDependenciesResolve() {
+		return wasInstalledWithChildrenHavingProvisionDependenciesResolve(this);
+	}
+	
+	private static boolean wasInstalledWithChildrenHavingProvisionDependenciesResolve(Subsystem child) {
+		BasicSubsystem bs = (BasicSubsystem) child;
+		SubsystemManifest manifest = bs.getSubsystemManifest();
+		SubsystemTypeHeader header = manifest.getSubsystemTypeHeader();
+		AriesProvisionDependenciesDirective directive = header.getAriesProvisionDependenciesDirective();
+		if (directive.isResolve()) {
+			return true;
+		}
+		return wasInstalledWithChildrenHavingProvisionDependenciesResolve(child.getChildren());
+	}
+	
+	private static boolean wasInstalledWithChildrenHavingProvisionDependenciesResolve(Collection<Subsystem> children) {
+		for (Subsystem child : children) {
+			if (wasInstalledWithChildrenHavingProvisionDependenciesResolve(child)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	@Override
+	public String toString() {
+		return new StringBuilder()
+				.append(getClass().getName())
+				.append(": ")
+				.append("children=")
+				.append(getChildren().size())
+				.append(", constituents=")
+				.append(getConstituents().size())
+				.append(", id=")
+				.append(getSubsystemId())
+				.append(", location=")
+				.append(getLocation())
+				.append(", parents=")
+				.append(getParents().size())
+				.append(", state=")
+				.append(getState())
+				.append(", symbolicName=")
+				.append(getSymbolicName())
+				.append(", type=")
+				.append(getType())
+				.append(", version=")
+				.append(getVersion())
+				.toString();
+	}
+>>>>>>> refs/remotes/apache/trunk
 }

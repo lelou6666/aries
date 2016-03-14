@@ -34,6 +34,7 @@ public class BundleRevisionResource implements Resource {
 
 	@Override
 	public List<Capability> getCapabilities(String namespace) {
+<<<<<<< HEAD
 		if (namespace == null) {
 			List<Capability> rCaps = revision.getCapabilities(namespace);
 			List<Capability> sCaps = computeServiceCapabilities();
@@ -49,10 +50,25 @@ public class BundleRevisionResource implements Resource {
 		if (result.isEmpty() && ServiceNamespace.SERVICE_NAMESPACE.equals(namespace))
 			result = Collections.unmodifiableList(computeServiceCapabilities());
 		return result;
+=======
+	    if (ServiceNamespace.SERVICE_NAMESPACE.equals(namespace)) {
+	        return Collections.unmodifiableList(getServiceCapabilities());
+	    }
+	    List<Capability> revisionCapabilities = revision.getCapabilities(namespace);
+	    if (namespace == null) {
+	    	List<Capability> serviceCapabilities = getServiceCapabilities();
+	        List<Capability> result = new ArrayList<Capability>(revisionCapabilities.size() + serviceCapabilities.size());
+	        result.addAll(revisionCapabilities);
+	        result.addAll(serviceCapabilities);
+	        return Collections.unmodifiableList(result);
+	    }
+	    return revisionCapabilities;
+>>>>>>> refs/remotes/apache/trunk
 	}
 
 	@Override
 	public List<Requirement> getRequirements(String namespace) {
+<<<<<<< HEAD
 		if (namespace == null) {
 			List<Requirement> rReqs = revision.getRequirements(namespace);
 			List<Requirement> sReqs = computeServiceRequirements();
@@ -68,26 +84,83 @@ public class BundleRevisionResource implements Resource {
 		if (result.isEmpty() && ServiceNamespace.SERVICE_NAMESPACE.equals(namespace))
 			result = Collections.unmodifiableList(computeServiceRequirements());
 		return result;
+=======
+	    if (ServiceNamespace.SERVICE_NAMESPACE.equals(namespace)) {
+	        return Collections.unmodifiableList(getServiceRequirements());
+	    }
+	    List<Requirement> revisionRequirements = revision.getRequirements(namespace);
+	    if (namespace == null) {
+	    	List<Requirement> serviceRequirements = getServiceRequirements();
+	        List<Requirement> result = new ArrayList<Requirement>(revisionRequirements.size() + serviceRequirements.size());
+            result.addAll(revisionRequirements);
+            result.addAll(serviceRequirements);
+            return Collections.unmodifiableList(result);
+	    }
+	    return revisionRequirements;
+>>>>>>> refs/remotes/apache/trunk
 	}
-
-	private List<Capability> computeServiceCapabilities() {
-        Activator activator = Activator.getInstance();
-        ServiceModeller modeller = activator.getServiceModeller();
-        if (modeller == null)
-            return Collections.emptyList();
-        ServiceModeller.ServiceModel model =
-                modeller.computeRequirementsAndCapabilities(this, new BundleDirectory(revision.getBundle()));
-        return model.getServiceCapabilities();
+	
+	public BundleRevision getRevision() {
+	    return revision;
 	}
-
-	private List<Requirement> computeServiceRequirements() {
-        Activator activator = Activator.getInstance();
-        ServiceModeller modeller = activator.getServiceModeller();
-        if (modeller == null)
-            return Collections.emptyList();
-        ServiceModeller.ServiceModel model =
-                modeller.computeRequirementsAndCapabilities(this, new BundleDirectory(revision.getBundle()));
-        return model.getServiceRequirements();
+	
+	private ServiceModeller.ServiceModel getModel() {
+	    Activator activator = Activator.getInstance();
+	    ServiceModeller modeller = activator.getServiceModeller();
+	    if (modeller == null) {
+            return null;
+        }
+	    ServiceModeller.ServiceModel model = modeller.computeRequirementsAndCapabilities(this,
+                new BundleDirectory(revision.getBundle()));
+	    return model;
 	}
-
+	
+	private boolean initialized;
+	private List<Capability> serviceCapabilities;
+	private List<Requirement> serviceRequirements;
+	
+	private synchronized void computeServiceCapabilitiesAndRequirements() {
+		ServiceModeller.ServiceModel model = null;
+		boolean gotModel = false;
+        List<Capability> capabilities = revision.getCapabilities(ServiceNamespace.SERVICE_NAMESPACE);
+        // OSGi RFC 201 for R6: The presence of any Provide-Capability clauses
+        // in the osgi.service namespace overrides any service related
+        // capabilities that might have been found by other means.
+        if (capabilities.isEmpty()) {
+            model = getModel();
+            gotModel = true;
+            if (model != null) {
+                capabilities = model.getServiceCapabilities();
+            }
+        }
+        serviceCapabilities = capabilities;
+        List<Requirement> requirements = revision.getRequirements(ServiceNamespace.SERVICE_NAMESPACE);
+        // OSGi RFC 201 for R6: The presence of any Require-Capability clauses
+        // in the osgi.service namespace overrides any service related
+        // requirements that might have been found by other means.
+        if (requirements.isEmpty()) {
+            if (model == null && !gotModel) {
+                model = getModel();
+            }
+            if (model != null) {
+                requirements = model.getServiceRequirements();
+            }
+        }
+        serviceRequirements = requirements;
+		initialized = true;
+	}
+	
+	private synchronized List<Capability> getServiceCapabilities() {
+		if (!initialized) {
+			computeServiceCapabilitiesAndRequirements();
+		}
+		return serviceCapabilities;
+	}
+	
+	private synchronized List<Requirement> getServiceRequirements() {
+		if (!initialized) {
+			computeServiceCapabilitiesAndRequirements();
+		}
+		return serviceRequirements;
+	}
 }

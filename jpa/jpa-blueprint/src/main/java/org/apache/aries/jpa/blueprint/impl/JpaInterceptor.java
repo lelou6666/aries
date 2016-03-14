@@ -24,59 +24,71 @@ import javax.persistence.EntityManager;
 import javax.persistence.spi.PersistenceUnitTransactionType;
 
 import org.apache.aries.blueprint.Interceptor;
-import org.apache.aries.jpa.supplier.EmSupplier;
+import org.osgi.service.blueprint.container.BlueprintContainer;
 import org.osgi.service.blueprint.reflect.ComponentMetadata;
+import org.osgi.service.coordinator.Coordination;
+import org.osgi.service.coordinator.Coordinator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JpaInterceptor implements Interceptor {
-    private EmSupplier emSupplier;
+    private static final Logger LOG = LoggerFactory.getLogger(JpaInterceptor.class);
+    EntityManager em;
     private Boolean cachedIsResourceLocal;
+    private Coordinator coordinator;
+    private BlueprintContainer container;
+    private String coordinatorId;
+    private String emId;
 
-    public JpaInterceptor(EmSupplier emSupplier) {
-        this.emSupplier = emSupplier;
+    public JpaInterceptor(BlueprintContainer container, String coordinatorId, String emId) {
+        this.container = container;
+        this.coordinatorId = coordinatorId;
+        this.emId = emId;
     }
 
+    @Override
     public int getRank() {
         return 0;
     }
 
+    @Override
     public Object preCall(ComponentMetadata cm, Method m, Object... parameters) throws Throwable {
+        if (coordinator == null) {
+            initServices();
+        }
         try {
-            emSupplier.preCall();
-            EntityManager em = emSupplier.get();
+            LOG.debug("PreCall for bean {}, method {}", cm.getId(), m.getName());
+            Coordination coordination = coordinator.begin("jpa", 0);
             boolean weControlTx = isResourceLocal(em) && !em.getTransaction().isActive();
             if (weControlTx) {
-                em.getTransaction().begin();
+                coordination.addParticipant(new ResourceLocalTransactionParticipant(em));
             }
-            return weControlTx;
+            return coordination;
         } catch (Exception e) {
-            e.printStackTrace();
-            return false;
+            LOG.warn("Exception from EmSupplier.preCall", e);
+            throw new RuntimeException(e); // NOSONAR
         }
     }
 
+    private void initServices() {
+        coordinator = (Coordinator)container.getComponentInstance(coordinatorId);
+        em = (EntityManager)container.getComponentInstance(emId);
+    }
+
+    @Override
     public void postCallWithException(ComponentMetadata cm, Method m, Throwable ex, Object preCallToken) {
-        boolean weControlTx = (Boolean)preCallToken;
-        if (weControlTx) {
-            safeRollback(emSupplier.get(), ex);
+        LOG.debug("PostCallWithException for bean {}, method {}", cm.getId(), m.getName(), ex);
+        if (preCallToken != null) {
+            ((Coordination) preCallToken).fail(ex);
         }
-        emSupplier.postCall();
     }
 
+    @Override
     public void postCallWithReturn(ComponentMetadata cm, Method m, Object returnType, Object preCallToken)
         throws Exception {
-        boolean weControlTx = (Boolean)preCallToken;
-        if (weControlTx) {
-            emSupplier.get().getTransaction().commit();
-        }
-        emSupplier.postCall();
-    }
-
-    private void safeRollback(EntityManager em, Throwable e) {
-        if (em != null) {
-            try {
-                em.getTransaction().rollback();
-            } catch (Exception e1) {
-            }
+        LOG.debug("PostCallWithReturn for bean {}, method {}", cm.getId(), m.getName());
+        if (preCallToken != null) {
+            ((Coordination) preCallToken).end();
         }
     }
 
@@ -94,10 +106,6 @@ public class JpaInterceptor implements Interceptor {
     private boolean isResourceLocalInternal(EntityManager em) {
         PersistenceUnitTransactionType transactionType = (PersistenceUnitTransactionType)em.getProperties()
             .get(PersistenceUnitTransactionType.class.getName());
-        if (transactionType == PersistenceUnitTransactionType.RESOURCE_LOCAL) {
-            return true;
-        } else {
-            return false;
-        }
+        return transactionType == PersistenceUnitTransactionType.RESOURCE_LOCAL;
     }
 }

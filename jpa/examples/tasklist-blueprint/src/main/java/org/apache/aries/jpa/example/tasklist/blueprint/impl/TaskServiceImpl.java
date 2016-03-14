@@ -22,47 +22,47 @@ import java.util.Collection;
 
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
+import javax.persistence.criteria.CriteriaQuery;
+import javax.transaction.Transactional;
+import javax.transaction.Transactional.TxType;
 
 import org.apache.aries.jpa.example.tasklist.model.Task;
 import org.apache.aries.jpa.example.tasklist.model.TaskService;
-import org.apache.aries.transaction.annotations.Transaction;
 
-
+@Transactional
 public class TaskServiceImpl implements TaskService {
 
-	@PersistenceContext(unitName="tasklist")
-	EntityManager em;
-	
-	@Override
-	public Task getTask(Integer id) {
-		return em.find(Task.class, id);
-	}
+    @PersistenceContext(unitName = "tasklist")
+    EntityManager em;
 
-	@Transaction
-	@Override
-	public void addTask(Task task) {
-		em.persist(task);
-		em.flush();
-	}
+    @Transactional(TxType.SUPPORTS)
+    @Override
+    public Task getTask(Integer id) {
+        return em.find(Task.class, id);
+    }
 
-	public Collection<Task> getTasks() {
-		return em.createQuery("select t from Task t", Task.class)
-			.getResultList();
-	}
+    
+    @Override
+    public void addTask(Task task) {
+        em.persist(task);
+        em.flush();
+    }
 
-	@Transaction
-	@Override
-	public void updateTask(Task task) {
-		em.persist(task);
-	}
+    @Transactional(TxType.SUPPORTS)
+    @Override
+    public Collection<Task> getTasks() {
+        CriteriaQuery<Task> query = em.getCriteriaBuilder().createQuery(Task.class);
+        return em.createQuery(query.select(query.from(Task.class))).getResultList();
+    }
 
-	@Transaction
-	@Override
-	public void deleteTask(Integer id) {
-		em.remove(getTask(id));
-	}
+    @Override
+    public void updateTask(Task task) {
+        em.persist(task);
+    }
 
-	public void setEm(EntityManager em) {
-		this.em = em;
-	}
+    @Override
+    public void deleteTask(Integer id) {
+        em.remove(getTask(id));
+    }
+
 }

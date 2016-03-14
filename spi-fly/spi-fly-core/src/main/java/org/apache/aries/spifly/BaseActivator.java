@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
@@ -38,10 +39,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.ServiceReference;
+import org.osgi.framework.wiring.BundleRevision;
+import org.osgi.framework.wiring.BundleWire;
+import org.osgi.framework.wiring.BundleWiring;
 import org.osgi.service.log.LogService;
 import org.osgi.util.tracker.BundleTracker;
-import org.osgi.util.tracker.ServiceTracker;
 
 public abstract class BaseActivator implements BundleActivator {
     private static final Set<WeavingData> NON_WOVEN_BUNDLE = Collections.emptySet();
@@ -52,7 +54,6 @@ public abstract class BaseActivator implements BundleActivator {
     public static BaseActivator activator;
 
     private BundleContext bundleContext;
-    private LogServiceTracker logServiceTracker;
     private List<LogService> logServices = new CopyOnWriteArrayList<LogService>();
     private BundleTracker consumerBundleTracker;
     private BundleTracker providerBundleTracker;
@@ -68,9 +69,6 @@ public abstract class BaseActivator implements BundleActivator {
 
     public synchronized void start(BundleContext context, final String consumerHeaderName) throws Exception {
         bundleContext = context;
-
-        logServiceTracker = new LogServiceTracker(context);
-        logServiceTracker.open();
 
         providerBundleTracker = new BundleTracker(context,
                 Bundle.ACTIVE, new ProviderBundleTrackerCustomizer(this, context.getBundle()));
@@ -93,14 +91,19 @@ public abstract class BaseActivator implements BundleActivator {
             return;
         }
 
-        Object consumerHeader = bundle.getHeaders().get(consumerHeaderName);
-        if (consumerHeader == null) {
-            consumerHeaderName = SpiFlyConstants.REQUIRE_CAPABILITY;
-            consumerHeader = bundle.getHeaders().get(consumerHeaderName);
+        Map<String, List<String>> allHeaders = new HashMap<String, List<String>>();
+        allHeaders.put(consumerHeaderName, getAllHeaders(consumerHeaderName, bundle));
+        allHeaders.put(SpiFlyConstants.REQUIRE_CAPABILITY, getAllHeaders(SpiFlyConstants.REQUIRE_CAPABILITY, bundle));
+
+        Set<WeavingData> wd = new HashSet<WeavingData>();
+        for (Map.Entry<String, List<String>> entry : allHeaders.entrySet()) {
+            String headerName = entry.getKey();
+            for (String headerVal : entry.getValue()) {
+                wd.addAll(ConsumerHeaderProcessor.processHeader(headerName, headerVal));
+            }
         }
 
-        if (consumerHeader instanceof String) {
-            Set<WeavingData> wd = ConsumerHeaderProcessor.processHeader(consumerHeaderName, (String) consumerHeader);
+        if (!wd.isEmpty()) {
             bundleWeavingData.put(bundle, Collections.unmodifiableSet(wd));
 
             for (WeavingData w : wd) {
@@ -109,6 +112,31 @@ public abstract class BaseActivator implements BundleActivator {
         } else {
             bundleWeavingData.put(bundle, NON_WOVEN_BUNDLE);
         }
+    }
+
+    private List<String> getAllHeaders(String headerName, Bundle bundle) {
+        List<Bundle> bundlesFragments = new ArrayList<Bundle>();
+        bundlesFragments.add(bundle);
+
+        BundleRevision rev = bundle.adapt(BundleRevision.class);
+        if (rev != null) {
+            BundleWiring wiring = rev.getWiring();
+            if (wiring != null) {
+                for (BundleWire wire : wiring.getProvidedWires("osgi.wiring.host")) {
+                    bundlesFragments.add(wire.getRequirement().getRevision().getBundle());
+                }
+            }
+        }
+
+        List<String> l = new ArrayList<String>();
+        for (Bundle bf : bundlesFragments) {
+            String header = bf.getHeaders().get(headerName);
+            if (header != null) {
+                l.add(header);
+            }
+        }
+
+        return l;
     }
 
     public void removeWeavingData(Bundle bundle) {
@@ -121,7 +149,6 @@ public abstract class BaseActivator implements BundleActivator {
 
         consumerBundleTracker.close();
         providerBundleTracker.close();
-        logServiceTracker.close();
     }
 
     public void log(int level, String message) {
@@ -262,22 +289,4 @@ public abstract class BaseActivator implements BundleActivator {
         return bundles;
     }
 
-    // TODO unRegisterConsumerBundle();
-    private class LogServiceTracker extends ServiceTracker {
-        public LogServiceTracker(BundleContext context) {
-            super(context, LogService.class.getName(), null);
-        }
-
-        public Object addingService(ServiceReference reference) {
-            Object svc = super.addingService(reference);
-            if (svc instanceof LogService)
-                logServices.add((LogService) svc);
-            return svc;
-        }
-
-        @Override
-        public void removedService(ServiceReference reference, Object service) {
-            logServices.remove(service);
-        }
-    }
 }

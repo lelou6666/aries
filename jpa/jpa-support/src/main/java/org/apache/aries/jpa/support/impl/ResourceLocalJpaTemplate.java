@@ -23,12 +23,19 @@ import javax.persistence.EntityManager;
 import org.apache.aries.jpa.supplier.EmSupplier;
 import org.apache.aries.jpa.template.EmFunction;
 import org.apache.aries.jpa.template.TransactionType;
+import org.osgi.service.coordinator.Coordination;
+import org.osgi.service.coordinator.Coordinator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ResourceLocalJpaTemplate extends AbstractJpaTemplate {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ResourceLocalJpaTemplate.class);
     private EmSupplier emSupplier;
+    private Coordinator coordinator;
 
-    public ResourceLocalJpaTemplate(EmSupplier emSupplier) {
+    public ResourceLocalJpaTemplate(EmSupplier emSupplier, Coordinator coordinator) {
         this.emSupplier = emSupplier;
+        this.coordinator = coordinator;
     }
 
     @Override
@@ -38,8 +45,8 @@ public class ResourceLocalJpaTemplate extends AbstractJpaTemplate {
         if (type != TransactionType.Required) {
             throw new IllegalStateException("Only transation propagation type REQUIRED is supported");
         }
+        Coordination coord = coordinator.begin(this.getClass().getName(), 0);
         try {
-            emSupplier.preCall();
             em = emSupplier.get();
             weControlTx = !em.getTransaction().isActive();
             if (weControlTx) {
@@ -52,19 +59,20 @@ public class ResourceLocalJpaTemplate extends AbstractJpaTemplate {
             return result;
         } catch (Exception e) {
             if (weControlTx) {
-                safeRollback(em, e);
+                safeRollback(em);
             }
-            throw new RuntimeException(e);
+            throw wrapThrowable(e, "Exception occured in transactional code");
         } finally {
-            emSupplier.postCall();
+            coord.end();
         }
     }
 
-    private void safeRollback(EntityManager em, Exception e) {
+    private static void safeRollback(EntityManager em) {
         if (em != null) {
             try {
                 em.getTransaction().rollback();
-            } catch (Exception e1) {
+            } catch (Exception e) {
+                LOGGER.warn("Exception during transaction rollback", e);
             }
         }
     }

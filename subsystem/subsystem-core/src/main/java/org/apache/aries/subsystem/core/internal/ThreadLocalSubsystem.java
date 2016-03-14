@@ -17,9 +17,11 @@ public class ThreadLocalSubsystem {
 	private static ThreadLocal<BasicSubsystem> subsystem = new ThreadLocal<BasicSubsystem>();
 	
 	public static BasicSubsystem get() {
-		BasicSubsystem result = (BasicSubsystem)subsystem.get();
+		return subsystem.get();
+	}
+	
+	public static void remove() {
 		subsystem.remove();
-		return result;
 	}
 	
 	public static void set(BasicSubsystem value) {

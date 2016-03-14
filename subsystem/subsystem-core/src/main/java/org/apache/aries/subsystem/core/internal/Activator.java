@@ -50,39 +50,35 @@ public class Activator implements BundleActivator, ServiceTrackerCustomizer<Obje
     public static final String LOG_ENTRY = "Method entry: {}, args {}";
     public static final String LOG_EXIT = "Method exit: {}, returning {}";
 
-    private static Activator instance;
-
-	public static synchronized Activator getInstance() {
-		logger.debug(LOG_ENTRY, "getInstance");
-		checkInstance();
-		logger.debug(LOG_EXIT, "getInstance", instance);
-		return instance;
+    private static volatile Activator instance;
+	public static Activator getInstance() {
+	    Activator result = instance;
+	    if (result == null)
+            throw new IllegalStateException("The activator has not been initialized or has been shutdown");
+		return result;
 	}
-
-	private static synchronized void checkInstance() {
-		logger.debug(LOG_ENTRY, "checkInstance");
-		if (instance == null)
-			throw new IllegalStateException("The activator has not been initialized or has been shutdown");
-		logger.debug(LOG_EXIT, "checkInstance");
-	}
-
-	// @GuardedBy("this")
-	private BundleEventHook bundleEventHook;
+	
 	private volatile BundleContext bundleContext;
     private volatile ConfigAdminContentHandler configAdminHandler;
 	private volatile Coordinator coordinator;
     private volatile Object modelledResourceManager;
-    private volatile ServiceModeller serviceModeller;
+    private volatile RegionDigraph regionDigraph;
 	private volatile SubsystemServiceRegistrar registrar;
-	private volatile RegionDigraph regionDigraph;
 	private volatile Resolver resolver;
+	private volatile ServiceModeller serviceModeller;
+	private volatile Subsystems subsystems;
+	private volatile SystemRepositoryManager systemRepositoryManager;
+	
+	private BundleEventHook bundleEventHook;
 	private ServiceTracker<?,?> serviceTracker;
 
-	private volatile Subsystems subsystems;
-
+<<<<<<< HEAD
 	private final Collection<ServiceRegistration<?>> registrations = new HashSet<ServiceRegistration<?>>();
+=======
+>>>>>>> refs/remotes/apache/trunk
 	private final Collection<IDirectoryFinder> finders = Collections.synchronizedSet(new HashSet<IDirectoryFinder>());
-
+	private final Collection<ServiceRegistration<?>> registrations = new HashSet<ServiceRegistration<?>>();
+	
 	public BundleContext getBundleContext() {
 		return bundleContext;
 	}
@@ -118,8 +114,13 @@ public class Activator implements BundleActivator, ServiceTrackerCustomizer<Obje
 		return result;
 	}
 
+<<<<<<< HEAD
 	public org.apache.aries.subsystem.core.repository.Repository getSystemRepository() {
 		return new SystemRepository(getSubsystems().getRootSubsystem());
+=======
+	public SystemRepository getSystemRepository() {
+		return systemRepositoryManager.getSystemRepository();
+>>>>>>> refs/remotes/apache/trunk
 	}
 
 	@Override
@@ -154,6 +155,8 @@ public class Activator implements BundleActivator, ServiceTrackerCustomizer<Obje
         configAdminHandler = new ConfigAdminContentHandler(bundleContext);
         registrations.add(bundleContext.registerService(ContentHandler.class, configAdminHandler, handlerProps));
 		registrar = new SubsystemServiceRegistrar(bundleContext);
+		systemRepositoryManager = new SystemRepositoryManager(bundleContext.getBundle(0).getBundleContext());
+        systemRepositoryManager.open();
 		BasicSubsystem root = subsystems.getRootSubsystem();
 		bundleEventHook.activate();
 		root.start();
@@ -164,6 +167,7 @@ public class Activator implements BundleActivator, ServiceTrackerCustomizer<Obje
 		if (!isActive())
 			return;
 		bundleEventHook.deactivate();
+		systemRepositoryManager.close();
 		new StopAction(subsystems.getRootSubsystem(), subsystems.getRootSubsystem(), true).run();
 		for (ServiceRegistration<?> registration : registrations) {
 			try {

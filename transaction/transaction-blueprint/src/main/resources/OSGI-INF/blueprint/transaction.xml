@@ -24,38 +24,16 @@
             
   <service interface="org.apache.aries.blueprint.NamespaceHandler" ref="nsHandler">
     <service-properties>
-      <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/xmlns/transactions/v1.0.0"/>
-    </service-properties>
-  </service>
-  <service interface="org.apache.aries.blueprint.NamespaceHandler" ref="nsHandler">
-    <service-properties>
-      <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/xmlns/transactions/v1.1.0"/>
-    </service-properties>
-  </service>
-  <service interface="org.apache.aries.blueprint.NamespaceHandler" ref="nsHandler">
-    <service-properties>
-      <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/xmlns/transactions/v1.2.0"/>
+      <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/xmlns/transactions/v2.0.0"/>
     </service-properties>
   </service>
 
   <bean id="nsHandler" class="org.apache.aries.transaction.parsing.TxNamespaceHandler">
-    <property ref="txenhancer" name="txMetaDataHelper"/>
-    <property name="blueprintContainer" ref="blueprintContainer" />
-  </bean>
-  
-  <bean id="txenhancer" class="org.apache.aries.transaction.TxComponentMetaDataHelperImpl"/>
-  
-  <bean id="txinterceptor" class="org.apache.aries.transaction.TxInterceptorImpl">
-    <property name="transactionManager" ref="tm"/>
-    <property ref="txenhancer" name="txMetaDataHelper"/>
+    <property name="tm" ref="tm" />
+    <property name="coordinator" ref="coordinator" />
   </bean>
   
   <reference id="tm" interface="javax.transaction.TransactionManager"/>
-  
-  <service interface="org.osgi.service.blueprint.container.BlueprintListener">
-  	<bean class="org.apache.aries.transaction.parsing.TxBlueprintListener">
-  	  <argument ref="nsHandler" />
-  	</bean>
-  </service>
-  
+  <reference id="coordinator" interface="org.osgi.service.coordinator.Coordinator"/>
+
 </blueprint>

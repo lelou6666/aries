@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -18,70 +18,70 @@
  */
 package org.apache.aries.blueprint.plugin.model;
 
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import org.ops4j.pax.cdi.api.OsgiService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import javax.inject.Inject;
+import javax.inject.Named;
+import javax.inject.Singleton;
 import javax.persistence.PersistenceContext;
 import javax.persistence.PersistenceUnit;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 public class Bean extends BeanRef {
     public String initMethod;
     public String destroyMethod;
-    public SortedSet<Property> properties;
-    public Field[] persistenceFields;
-    public TransactionalDef transactionDef;
+    public SortedSet<Property> properties = new TreeSet<>();
+    public List<Argument> constructorArguments = new ArrayList<>();
+    public Set<OsgiServiceRef> serviceRefs = new HashSet<>();
+    public List<Field> persistenceFields;
+    public Set<TransactionalDef> transactionDefs = new HashSet<>();
+    public boolean isPrototype;
 
     public Bean(Class<?> clazz) {
-        super(clazz);
+        super(clazz, BeanRef.getBeanName(clazz));
+        Introspector introspector = new Introspector(clazz);
 
-        for (Method method : clazz.getDeclaredMethods()) {
-            PostConstruct postConstruct = getEffectiveAnnotation(method, PostConstruct.class);
-            if (postConstruct != null) {
-                this.initMethod = method.getName();
-            }
-            PreDestroy preDestroy = getEffectiveAnnotation(method, PreDestroy.class);
-            if (preDestroy != null) {
-                this.destroyMethod = method.getName();
-            }
+        // Init method
+        Method initMethod = introspector.methodWith(PostConstruct.class);
+        if (initMethod != null) {
+            this.initMethod = initMethod.getName();
         }
-        this.persistenceFields = getPersistenceFields();
-        this.transactionDef = new JavaxTransactionFactory().create(clazz);
-        if (this.transactionDef == null) {
-            this.transactionDef = new SpringTransactionFactory().create(clazz);
+
+        // Destroy method
+        Method destroyMethod = introspector.methodWith(PreDestroy.class);
+        if (destroyMethod != null) {
+            this.destroyMethod = destroyMethod.getName();
         }
-        properties = new TreeSet<Property>();
+
+        // Transactional methods
+        transactionDefs.addAll(new JavaxTransactionFactory().create(clazz));
+        transactionDefs.addAll(new SpringTransactionFactory().create(clazz));
+        this.isPrototype = isPrototype(clazz);
+        this.persistenceFields = introspector.fieldsWith(PersistenceContext.class, PersistenceUnit.class);
+        setQualifiersFromAnnotations(clazz.getAnnotations());
     }
 
-    private Field[] getPersistenceFields() {
-        List<Field> persistenceFields = new ArrayList<Field>();
-        Field[] fields = clazz.getDeclaredFields();
-        for (Field field : fields) {
-            PersistenceContext persistenceContext = field.getAnnotation(PersistenceContext.class);
-            PersistenceUnit persistenceUnit = field.getAnnotation(PersistenceUnit.class);
-            if (persistenceContext !=null || persistenceUnit != null) {
-                 persistenceFields.add(field);
-            }
-        }
-        return persistenceFields.toArray(new Field[]{});
+    private boolean isPrototype(Class<?> clazz) {
+        return clazz.getAnnotation(Singleton.class) == null && clazz.getAnnotation(Component.class) == null;
     }
-    
+
     public void resolve(Matcher matcher) {
-        Class<?> curClass = this.clazz;
-        while (curClass != null && curClass != Object.class) {
-            resolveProperties(matcher, curClass);
-            curClass = curClass.getSuperclass();
-        }
-    }
-    
-    private void resolveProperties(Matcher matcher, Class<?> curClass) {
-        for (Field field : curClass.getDeclaredFields()) {
+        resolveConstructorArguments(matcher);
+        for (Field field : new Introspector(clazz).fieldsWith(Value.class, Autowired.class, Inject.class)) {
             Property prop = Property.create(matcher, field);
             if (prop != null) {
                 properties.add(prop);
@@ -89,53 +89,61 @@ public class Bean extends BeanRef {
         }
     }
 
-    private static <T extends Annotation> T getEffectiveAnnotation(Method method, Class<T> annotationClass) {
-        final Class<?> methodClass = method.getDeclaringClass();
-        final String name = method.getName();
-        final Class<?>[] params = method.getParameterTypes();
+    private void resolveConstructorArguments(Matcher matcher) {
+        for (Constructor constructor : clazz.getDeclaredConstructors()) {
+            Annotation inject = constructor.getAnnotation(Inject.class);
+            Annotation autowired = constructor.getAnnotation(Autowired.class);
+            if (inject != null || autowired != null) {
+                Class[] parameterTypes = constructor.getParameterTypes();
+                Annotation[][] parameterAnnotations = constructor.getParameterAnnotations();
+                for (int i = 0; i < parameterTypes.length; ++i) {
+                    Annotation[] annotations = parameterAnnotations[i];
+                    String ref = null;
+                    String value = null;
+                    Value valueAnnotation = findAnnotation(annotations, Value.class);
+                    OsgiService osgiServiceAnnotation = findAnnotation(annotations, OsgiService.class);
 
-        // 1. Current class
-        final T rootAnnotation = method.getAnnotation(annotationClass);
-        if (rootAnnotation != null) {
-            return rootAnnotation;
+                    if (valueAnnotation != null) {
+                        value = valueAnnotation.value();
+                    }
+
+                    if (osgiServiceAnnotation != null) {
+                        Named namedAnnotation = findAnnotation(annotations, Named.class);
+                        ref = namedAnnotation != null ? namedAnnotation.value() : getBeanNameFromSimpleName(parameterTypes[i].getSimpleName());
+                        OsgiServiceRef osgiServiceRef = new OsgiServiceRef(parameterTypes[i], osgiServiceAnnotation, ref);
+                        serviceRefs.add(osgiServiceRef);
+                    }
+
+                    if (ref == null && value == null && osgiServiceAnnotation == null) {
+                        BeanRef template = new BeanRef(parameterTypes[i]);
+                        template.setQualifiersFromAnnotations(annotations);
+                        BeanRef bean = matcher.getMatching(template);
+                        if (bean != null) {
+                            ref = bean.id;
+                        } else {
+                            Named namedAnnotation = findAnnotation(annotations, Named.class);
+                            if (namedAnnotation != null) {
+                                ref = namedAnnotation.value();
+                            } else {
+                                ref = getBeanName(parameterTypes[i]);
+                            }
+                        }
+                    }
+
+                    constructorArguments.add(new Argument(ref, value));
+                }
+                break;
+            }
         }
+    }
 
-        // 2. Superclass
-        final Class<?> superclass = methodClass.getSuperclass();
-        if (superclass != null) {
-            final T annotation = getMethodAnnotation(superclass, name, params, annotationClass);
-            if (annotation != null)
-                return annotation;
+    private static <T> T findAnnotation(Annotation[] annotations, Class<T> annotation) {
+        for (Annotation a : annotations) {
+            if (a.annotationType() == annotation) {
+                return annotation.cast(a);
+            }
         }
-
-        // 3. Interfaces
-        for (final Class<?> intfs : methodClass.getInterfaces()) {
-            final T annotation = getMethodAnnotation(intfs, name, params, annotationClass);
-            if (annotation != null)
-                return annotation;
-        }
-
         return null;
-    }
-
-    private static <T extends Annotation> T getMethodAnnotation(Class<?> searchClass, String name, Class<?>[] params,
-            Class<T> annotationClass) {
-        try {
-            Method method = searchClass.getMethod(name, params);
-            return getEffectiveAnnotation(method, annotationClass);
-        } catch (NoSuchMethodException e) {
-            return null;
-        }
-    }
-
-
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((clazz == null) ? 0 : clazz.getName().hashCode());
-        result = prime * result + ((id == null) ? 0 : id.hashCode());
-        return result;
     }
 
     @Override
@@ -148,5 +156,12 @@ public class Bean extends BeanRef {
             writer.writeProperty(property);
         }
     }
-    
+
+    public void writeArguments(ArgumentWriter writer) {
+        for (Argument argument : constructorArguments) {
+            writer.writeArgument(argument);
+        }
+    }
+
+
 }

@@ -41,8 +41,8 @@
     </scm>
 
     <properties>
+        <aries.skip.version.check>true</aries.skip.version.check>
         <!-- Export package versions are maintained in packageinfo files -->
-
         <aries.osgi.export.pkg>
             org.apache.aries.transaction.test
         </aries.osgi.export.pkg>
@@ -50,5 +50,20 @@
             org.apache.aries.transaction.test.impl
         </aries.osgi.private.pkg>
     </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.aries.transaction</groupId>
+            <artifactId>org.apache.aries.transaction.blueprint</artifactId>
+            <scope>provided</scope>
+            <version>1.0.2</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.transaction</groupId>
+            <artifactId>javax.transaction-api</artifactId>
+            <version>1.2</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
 
 </project>

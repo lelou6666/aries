@@ -16,6 +16,7 @@ package org.apache.aries.subsystem.core.archive;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+<<<<<<< HEAD
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,11 +25,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+=======
+import java.util.List;
+>>>>>>> refs/remotes/apache/trunk
 
 import org.osgi.framework.Constants;
 import org.osgi.framework.namespace.PackageNamespace;
 import org.osgi.resource.Resource;
 
+<<<<<<< HEAD
 public class DynamicImportPackageHeader implements RequirementHeader<DynamicImportPackageHeader.Clause> {
 	public static class Clause implements org.apache.aries.subsystem.core.archive.Clause {
 		private static final String REGEX1 = '(' + Grammar.WILDCARD_NAMES + ")(?=;|\\z)";
@@ -130,6 +135,26 @@ public class DynamicImportPackageHeader implements RequirementHeader<DynamicImpo
 			return (VersionRangeAttribute)myParameters.get(Constants.VERSION_ATTRIBUTE);
 		}
 		
+=======
+public class DynamicImportPackageHeader extends AbstractClauseBasedHeader<DynamicImportPackageHeader.Clause> implements RequirementHeader<DynamicImportPackageHeader.Clause> {
+    public static class Clause extends AbstractClause {
+		public Clause(String clause) {
+			super(
+					parsePath(clause, Patterns.WILDCARD_NAMES, true),
+					parseParameters(clause, true), 
+            		generateDefaultParameters(
+            				VersionRangeAttribute.DEFAULT_VERSION));
+		}
+		
+		public Collection<String> getPackageNames() {
+			return Arrays.asList(path.split(";"));
+		}
+		
+		public VersionRangeAttribute getVersionRangeAttribute() {
+			return (VersionRangeAttribute)parameters.get(Constants.VERSION_ATTRIBUTE);
+		}
+        
+>>>>>>> refs/remotes/apache/trunk
 		public List<DynamicImportPackageRequirement> toRequirements(Resource resource) {
 			Collection<String> pkgs = getPackageNames();
 			List<DynamicImportPackageRequirement> result = new ArrayList<DynamicImportPackageRequirement>(pkgs.size());
@@ -138,6 +163,7 @@ public class DynamicImportPackageHeader implements RequirementHeader<DynamicImpo
 			}
 			return result;
 		}
+<<<<<<< HEAD
 		
 		@Override
 		public String toString() {
@@ -148,6 +174,8 @@ public class DynamicImportPackageHeader implements RequirementHeader<DynamicImpo
 			}
 			return builder.toString();
 		}
+=======
+>>>>>>> refs/remotes/apache/trunk
 	}
 	
 	public static final String ATTRIBUTE_BUNDLE_SYMBOLICNAME = PackageNamespace.CAPABILITY_BUNDLE_SYMBOLICNAME_ATTRIBUTE;
@@ -155,6 +183,7 @@ public class DynamicImportPackageHeader implements RequirementHeader<DynamicImpo
 	public static final String ATTRIBUTE_VERSION = PackageNamespace.CAPABILITY_VERSION_ATTRIBUTE;
 	public static final String NAME = Constants.DYNAMICIMPORT_PACKAGE;
 	
+<<<<<<< HEAD
 	private static Collection<Clause> processHeader(String header) {
 		Set<Clause> clauses = new HashSet<Clause>();
 		for (String clause : new ClauseTokenizer(header).getClauses())
@@ -179,6 +208,25 @@ public class DynamicImportPackageHeader implements RequirementHeader<DynamicImpo
 	}
 
 	public String getName() {
+=======
+	public DynamicImportPackageHeader(Collection<Clause> clauses) {
+		super(clauses);
+	}
+	
+	public DynamicImportPackageHeader(String value) {
+		super(
+				value, 
+				new ClauseFactory<Clause>() {
+					@Override
+					public Clause newInstance(String clause) {
+						return new Clause(clause);
+					}
+				});
+	}
+	
+	@Override
+    public String getName() {
+>>>>>>> refs/remotes/apache/trunk
 		return Constants.IMPORT_PACKAGE;
 	}
 	
@@ -196,6 +244,7 @@ public class DynamicImportPackageHeader implements RequirementHeader<DynamicImpo
 		}
 		return result;
 	}
+<<<<<<< HEAD
 	
 	@Override
 	public String toString() {
@@ -207,4 +256,6 @@ public class DynamicImportPackageHeader implements RequirementHeader<DynamicImpo
 		builder.deleteCharAt(builder.length() - 1);
 		return builder.toString();
 	}
+=======
+>>>>>>> refs/remotes/apache/trunk
 }

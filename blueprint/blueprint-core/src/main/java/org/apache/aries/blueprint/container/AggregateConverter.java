@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 import org.apache.aries.blueprint.container.BeanRecipe.UnwrapperedBeanHolder;
+import org.apache.aries.blueprint.container.GenericType.BoundType;
 import org.apache.aries.blueprint.di.CollectionRecipe;
 import org.apache.aries.blueprint.di.MapRecipe;
 import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
@@ -329,38 +330,51 @@ public class AggregateConverter implements Converter {
         if (obj.getClass().isArray()) {
             for (int i = 0; i < Array.getLength(obj); i++) {
                 try {
-                    newCol.add(convert(Array.get(obj, i), valueType));
+                    Object ov = Array.get(obj, i);
+                    Object cv = convert(ov, valueType);
+                    newCol.add(cv);
                 } catch (Exception t) {
                     throw new Exception("Unable to convert from " + obj + " to " + type + "(error converting array element)", t);
                 }
             }
+            return newCol;
         } else {
+            boolean converted = !toClass(type).isAssignableFrom(obj.getClass());
             for (Object item : (Collection) obj) {
                 try {
-                    newCol.add(convert(item, valueType));
+                    Object cv = convert(item, valueType);
+                    converted |= item != cv;
+                    newCol.add(cv);
                 } catch (Exception t) {
                     throw new Exception("Unable to convert from " + obj + " to " + type + "(error converting collection entry)", t);
                 }
             }
+            return converted ? newCol : obj;
         }
-        return newCol;
     }
 
     private Object convertToDictionary(Object obj, ReifiedType type) throws Exception {
         ReifiedType keyType = type.getActualTypeArgument(0);
         ReifiedType valueType = type.getActualTypeArgument(1);
-        Dictionary newDic = new Hashtable();
         if (obj instanceof Dictionary) {
+            Dictionary newDic = new Hashtable();
             Dictionary dic = (Dictionary) obj;
+            boolean converted = false;
             for (Enumeration keyEnum = dic.keys(); keyEnum.hasMoreElements();) {
                 Object key = keyEnum.nextElement();
                 try {
-                    newDic.put(convert(key, keyType), convert(dic.get(key), valueType));
+                    Object nk = convert(key, keyType);
+                    Object ov = dic.get(key);
+                    Object nv = convert(ov, valueType);
+                    newDic.put(nk, nv);
+                    converted |= nk != key || nv != ov;
                 } catch (Exception t) {
                     throw new Exception("Unable to convert from " + obj + " to " + type + "(error converting map entry)", t);
                 }
             }
+            return converted ? newDic : obj;
         } else {
+            Dictionary newDic = new Hashtable();
             for (Map.Entry e : ((Map<Object,Object>) obj).entrySet()) {
                 try {
                     newDic.put(convert(e.getKey(), keyType), convert(e.getValue(), valueType));
@@ -368,8 +382,8 @@ public class AggregateConverter implements Converter {
                     throw new Exception("Unable to convert from " + obj + " to " + type + "(error converting map entry)", t);
                 }
             }
+            return newDic;
         }
-        return newDic;
     }
 
     private Object convertToMap(Object obj, ReifiedType type) throws Exception {
@@ -387,16 +401,21 @@ public class AggregateConverter implements Converter {
                     throw new Exception("Unable to convert from " + obj + " to " + type + "(error converting map entry)", t);
                 }
             }
+            return newMap;
         } else {
+            boolean converted = false;
             for (Map.Entry e : ((Map<Object,Object>) obj).entrySet()) {
                 try {
-                    newMap.put(convert(e.getKey(), keyType), convert(e.getValue(), valueType));
+                    Object nk = convert(e.getKey(), keyType);
+                    Object nv = convert(e.getValue(), valueType);
+                    converted |= nk != e.getKey() || nv != e.getValue();
+                    newMap.put(nk, nv);
                 } catch (Exception t) {
                     throw new Exception("Unable to convert from " + obj + " to " + type + "(error converting map entry)", t);
                 }
             }
+            return converted ? newMap : obj;
         }
-        return newMap;
     }
 
     private Object convertToArray(Object obj, ReifiedType type) throws Exception {
@@ -413,14 +432,18 @@ public class AggregateConverter implements Converter {
             componentType = new GenericType(type.getRawClass().getComponentType());
         }
         Object array = Array.newInstance(toClass(componentType), Array.getLength(obj));
+        boolean converted = array.getClass() != obj.getClass();
         for (int i = 0; i < Array.getLength(obj); i++) {
             try {
-                Array.set(array, i, convert(Array.get(obj, i), componentType));
+                Object ov = Array.get(obj, i);
+                Object nv = convert(ov, componentType);
+                converted |= nv != ov;
+                Array.set(array, i, nv);
             } catch (Exception t) {
                 throw new Exception("Unable to convert from " + obj + " to " + type + "(error converting array element)", t);
             }
         }
-        return array;
+        return converted ? array : obj;
     }
 
     public static boolean isAssignable(Object source, ReifiedType target) {
@@ -438,6 +461,22 @@ public class AggregateConverter implements Converter {
         if (from.equals(to)) {
             return true;
         }
+        if (from.getRawClass() == to.getRawClass()) {
+            if (from.size() == to.size()) {
+                boolean ok = true;
+                for (int i = 0; i < from.size(); i++) {
+                    ReifiedType tf = from.getActualTypeArgument(i);
+                    ReifiedType tt = to.getActualTypeArgument(i);
+                    if (!isWildcardCompatible(tf, tt)) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (ok) {
+                    return true;
+                }
+            }
+        }
         Type t = from.getRawClass().getGenericSuperclass();
         if (t != null && isTypeAssignable(new GenericType(t), to)) {
             return true;
@@ -448,6 +487,18 @@ public class AggregateConverter implements Converter {
             }
         }
         return false;
+    }
+
+    private static boolean isWildcardCompatible(ReifiedType from, ReifiedType to) {
+        BoundType fromBoundType = GenericType.boundType(from);
+        BoundType toBoundType = GenericType.boundType(to);
+        if (toBoundType == BoundType.Extends) {
+            return fromBoundType != BoundType.Super && isTypeAssignable(from, GenericType.bound(to));
+        } else if (toBoundType == BoundType.Super) {
+            return fromBoundType != BoundType.Extends && isTypeAssignable(GenericType.bound(to), from);
+        } else {
+            return fromBoundType == BoundType.Exact && GenericType.bound(from).equals(GenericType.bound(to));
+        }
     }
 
     private static Class unwrap(Class c) {

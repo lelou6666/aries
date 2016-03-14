@@ -29,8 +29,11 @@ import org.apache.aries.jpa.template.JpaTemplate;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
+import org.osgi.service.coordinator.Coordinator;
 import org.osgi.service.jpa.EntityManagerFactoryBuilder;
 import org.osgi.util.tracker.ServiceTracker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Is created for an EntityManagerFactory with JTA transactions and creates
@@ -38,26 +41,30 @@ import org.osgi.util.tracker.ServiceTracker;
  */
 @SuppressWarnings("rawtypes")
 public class TMTracker extends ServiceTracker<TransactionManager, ServiceRegistration> {
+    private static final Logger LOG = LoggerFactory.getLogger(TMTracker.class);
     static final String TRANSACTION_TYPE = "transaction.type";
 
     private final EmSupplier emSupplier;
     private final String unitName;
 
-    public TMTracker(BundleContext context, EmSupplier emSupplier, String unitName) {
+    private Coordinator coordinator;
+
+    public TMTracker(BundleContext context, EmSupplier emSupplier, String unitName, Coordinator coordinator) {
         super(context, TransactionManager.class, null);
         this.emSupplier = emSupplier;
         this.unitName = unitName;
+        this.coordinator = coordinator;
     }
 
     @Override
     public ServiceRegistration addingService(ServiceReference<TransactionManager> ref) {
         TransactionManager tm = context.getService(ref);
-        XAJpaTemplate txManager = new XAJpaTemplate(emSupplier, tm);
+        XAJpaTemplate txManager = new XAJpaTemplate(emSupplier, tm, coordinator);
         return context.registerService(JpaTemplate.class, txManager, xaTxManProps(unitName));
     }
 
-    private Dictionary<String, String> xaTxManProps(String unitName) {
-        Dictionary<String, String> txmanProperties = new Hashtable<>();
+    private static Dictionary<String, String> xaTxManProps(String unitName) {
+        Dictionary<String, String> txmanProperties = new Hashtable<String, String>(); // NOSONAR
         txmanProperties.put(EntityManagerFactoryBuilder.JPA_UNIT_NAME, unitName);
         txmanProperties.put(TRANSACTION_TYPE, "JTA");
         return txmanProperties;
@@ -69,7 +76,7 @@ public class TMTracker extends ServiceTracker<TransactionManager, ServiceRegistr
             reg.unregister();
             context.ungetService(reference);
         } catch (Exception e) {
-            // Ignore. May happen if persistence unit bundle is unloaded / updated
+            LOG.debug("Exception during unregister", e);
         }
     }
 

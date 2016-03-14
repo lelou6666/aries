@@ -37,7 +37,6 @@ public class RegionContextBundleHelper {
 		String location = subsystem.getLocation() + '/' + subsystem.getSubsystemId();
 		Bundle b = subsystem.getRegion().getBundle(symbolicName, VERSION);
 		if (b == null) {
-			ThreadLocalSubsystem.set(subsystem);
 			b = subsystem.getRegion().installBundleAtLocation(location, createRegionContextBundle(symbolicName));
 			// The start level of all managed bundles, including the region
 			// context bundle, should be 1.
@@ -46,6 +45,7 @@ public class RegionContextBundleHelper {
 		ResourceInstaller.newInstance(coordination, b.adapt(BundleRevision.class), subsystem).install();
 		// The region context bundle must be started persistently.
 		b.start();
+		subsystem.setRegionContextBundle(b);
 	}
 	
 	public static void uninstallRegionContextBundle(BasicSubsystem subsystem) {
@@ -53,7 +53,6 @@ public class RegionContextBundleHelper {
 		Bundle bundle = subsystem.getRegion().getBundle(symbolicName, VERSION);
 		if (bundle == null)
 			return;
-		ThreadLocalSubsystem.set(subsystem);
 		BundleRevision revision = bundle.adapt(BundleRevision.class);
 		try {
 			bundle.uninstall();
@@ -62,6 +61,7 @@ public class RegionContextBundleHelper {
 			// TODO Should we really eat this? At least log it?
 		}
 		ResourceUninstaller.newInstance(revision, subsystem).uninstall();
+		subsystem.setRegionContextBundle(null);
 	}
 	
 	private static Manifest createManifest(String symbolicName) {

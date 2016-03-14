@@ -19,7 +19,7 @@
 package org.apache.aries.blueprint.plugin;
 
 import java.io.File;
-import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -35,6 +35,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.project.MavenProject;
 import org.apache.xbean.finder.ClassFinder;
+import org.sonatype.plexus.build.incremental.BuildContext;
 
 /**
  * Generates blueprint from spring annotations
@@ -59,26 +60,52 @@ public class GenerateMojo extends AbstractMojo {
      * @required
      */
     protected List<String> scanPaths;
+    
+    /**
+     * Which extension namespaces should the plugin support
+     * 
+     * @parameter 
+     */
+    protected Set<String> namespaces;
+    
+    /**
+     * @component
+     */
+    private BuildContext buildContext;
 
     public void execute() throws MojoExecutionException, MojoFailureException {
+        if (!buildContext.hasDelta(new File(project.getCompileSourceRoots().iterator().next()))) {
+            return;
+        }
+        
         try {
-            String buildDir = project.getBuild().getDirectory();
-            String generatedDir = buildDir + "/generated-resources";
-            Resource resource = new Resource();
-            resource.setDirectory(generatedDir);
-            project.addResource(resource);
             ClassFinder finder = createProjectScopeFinder();
             
-            File file = new File(generatedDir, "OSGI-INF/blueprint/autowire.xml");
-            file.getParentFile().mkdirs();
-            System.out.println("Generating blueprint to " + file);
             Set<Class<?>> classes = FilteredClassFinder.findClasses(finder, scanPaths);
             Context context = new Context(classes);
             context.resolve();
-            new Generator(context, new FileOutputStream(file)).generate();
+            if (context.getBeans().size() > 0) {
+                writeBlueprint(context);
+            }
         } catch (Exception e) {
             throw new MojoExecutionException("Error building commands help", e);
         }
+    }
+
+    private void writeBlueprint(Context context) throws Exception {
+        String buildDir = project.getBuild().getDirectory();
+        String generatedDir = buildDir + "/generated-resources";
+        Resource resource = new Resource();
+        resource.setDirectory(generatedDir);
+        project.addResource(resource);
+
+        File file = new File(generatedDir, "OSGI-INF/blueprint/autowire.xml");
+        file.getParentFile().mkdirs();
+        System.out.println("Generating blueprint to " + file);
+
+        OutputStream fos = buildContext.newFileOutputStream(file);
+        new Generator(context, fos, namespaces).generate();
+        fos.close();
     }
 
     private ClassFinder createProjectScopeFinder() throws MalformedURLException {

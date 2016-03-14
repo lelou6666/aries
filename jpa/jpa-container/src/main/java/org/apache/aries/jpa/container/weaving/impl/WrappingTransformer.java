@@ -35,20 +35,16 @@ import org.osgi.framework.wiring.BundleWiring;
 class WrappingTransformer implements ClassTransformer {
     private final ClassTransformer delegate;
     private final Collection<String> packageImportsToAdd = new HashSet<String>();
+    
+    public WrappingTransformer(ClassTransformer transformer) {
+        delegate = transformer;
+    }
 
     public WrappingTransformer(ClassTransformer delegate, ServiceReference<?> persistenceProvider) {
-
-        if (delegate == null)
-            throw new NullPointerException("Transformer delegate may not be null");
-
-        if (persistenceProvider == null) {
-            throw new NullPointerException("PersistenceProvider may not be null");
-        }
-
+        validate(delegate, persistenceProvider);
         this.delegate = delegate;
 
         Object packages = persistenceProvider.getProperty("org.apache.aries.jpa.container.weaving.packages");
-
         if (packages instanceof String[]) {
             for (String s : (String[])packages) {
                 packageImportsToAdd.add(s);
@@ -65,30 +61,40 @@ class WrappingTransformer implements ClassTransformer {
         }
     }
 
-    public WrappingTransformer(ClassTransformer transformer) {
-        delegate = transformer;
+    private static void validate(ClassTransformer delegate, ServiceReference<?> persistenceProvider) {
+        if (delegate == null) {
+            throw new NullPointerException("Transformer delegate may not be null");
+        }
+        if (persistenceProvider == null) {
+            throw new NullPointerException("PersistenceProvider may not be null");
+        }
     }
 
-    public byte[] transform(ClassLoader arg0, String arg1, Class<?> arg2, ProtectionDomain arg3, byte[] arg4)
+ 
+    @Override
+    public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer)
         throws IllegalClassFormatException {
-        return delegate.transform(arg0, arg1, arg2, arg3, arg4);
+        return delegate.transform(loader, className, classBeingRedefined, protectionDomain, classfileBuffer);
     }
 
     public Collection<String> getPackagesToAdd() {
         return packageImportsToAdd;
     }
 
+    @Override
     public int hashCode() {
         return delegate.hashCode();
     }
 
+    @Override
     public boolean equals(Object o) {
-        if (o instanceof WrappingTransformer)
+        if (o instanceof WrappingTransformer) {
             return delegate == ((WrappingTransformer)o).delegate;
-
+        }
         return false;
     }
 
+    @Override
     public String toString() {
         return "Transformer: " + delegate.toString() + " Packages to add: " + packageImportsToAdd;
     }

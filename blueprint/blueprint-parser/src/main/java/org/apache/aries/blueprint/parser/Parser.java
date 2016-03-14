@@ -18,17 +18,6 @@
  */
 package org.apache.aries.blueprint.parser;
 
-import java.io.InputStream;
-import java.net.URI;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-
 import javax.xml.XMLConstants;
 import javax.xml.namespace.QName;
 import javax.xml.parsers.DocumentBuilder;
@@ -36,6 +25,19 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.validation.Schema;
 import javax.xml.validation.Validator;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.aries.blueprint.ComponentDefinitionRegistry;
 import org.apache.aries.blueprint.NamespaceHandler;
@@ -88,6 +90,7 @@ import org.w3c.dom.EntityReference;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 
 /**
@@ -208,6 +211,7 @@ public class Parser {
     private String defaultAvailability;
     private String defaultActivation;
     private Set<URI> namespaces;
+    private Map<String, String> locations;
 
     public Parser() {
       this(null);
@@ -228,12 +232,17 @@ public class Parser {
      * @throws Exception on parse error
      */
     public void parse(InputStream inputStream) throws Exception { 
-      InputSource inputSource = new InputSource(inputStream);
-      DocumentBuilder builder = getDocumentBuilderFactory().newDocumentBuilder();
-      Document doc = builder.parse(inputSource);
-      documents.add(doc);
+      parse(null, inputStream);
     }
-    
+
+    public void parse(String location, InputStream inputStream) throws Exception {
+        InputSource inputSource = new InputSource(inputStream);
+        inputSource.setSystemId(location);
+        DocumentBuilder builder = getDocumentBuilderFactory().newDocumentBuilder();
+        Document doc = builder.parse(inputSource);
+        documents.add(doc);
+    }
+
     /**
      * Parse blueprint xml referred to by a list of URLs
      * @param urls URLs to blueprint xml to parse
@@ -245,7 +254,7 @@ public class Parser {
         for (URL url : urls) {
             InputStream inputStream = url.openStream();
             try {
-                parse (inputStream);
+                parse (url.toString(), inputStream);
             } finally {
                 inputStream.close();
             }
@@ -255,20 +264,36 @@ public class Parser {
     public Set<URI> getNamespaces() {
         if (this.namespaces == null) {
             Set<URI> namespaces = new LinkedHashSet<URI>();
+            Map<String, String> locations = new HashMap<String, String>();
             for (Document doc : documents) {
-                findNamespaces(namespaces, doc);
+                findNamespaces(namespaces, locations, doc);
             }
             this.namespaces = namespaces;
+            this.locations = locations;
         }
         return this.namespaces;
     }
 
-    private void findNamespaces(Set<URI> namespaces, Node node) {
+    public Map<String, String> getSchemaLocations() {
+        getNamespaces();
+        return locations;
+    }
+
+    private void findNamespaces(Set<URI> namespaces, Map<String, String> locations, Node node) {
         if (node instanceof Element || node instanceof Attr) {
             String ns = node.getNamespaceURI();
-            if (ns != null && !isBlueprintNamespace(ns) && !isIgnorableAttributeNamespace(ns)) {
+            if ("http://www.w3.org/2001/XMLSchema-instance".equals(ns)
+                    && node instanceof Attr
+                    && "schemaLocation".equals(node.getLocalName())) {
+                String val = ((Attr) node).getValue();
+                List<String> locs = new ArrayList<String>(Arrays.asList(val.split("\\s+")));
+                locs.remove("");
+                for (int i = 0; i < locs.size() / 2; i++) {
+                    locations.put(locs.get(i * 2), locs.get(i * 2 + 1));
+                }
+            } else if (ns != null && !isBlueprintNamespace(ns) && !isIgnorableAttributeNamespace(ns)) {
                 namespaces.add(URI.create(ns));
-            }else if ( ns == null && //attributes from blueprint are unqualified as per schema.
+            } else if (ns == null && //attributes from blueprint are unqualified as per schema.
                        node instanceof Attr &&
                        SCOPE_ATTRIBUTE.equals(node.getNodeName()) &&
                        ((Attr)node).getOwnerElement() != null && //should never occur from parsed doc.
@@ -285,12 +310,12 @@ public class Parser {
         NamedNodeMap nnm = node.getAttributes();
         if(nnm!=null){
             for(int i = 0; i< nnm.getLength() ; i++){
-                findNamespaces(namespaces, nnm.item(i));
+                findNamespaces(namespaces, locations, nnm.item(i));
             }
         }
         NodeList nl = node.getChildNodes();
         for (int i = 0; i < nl.getLength(); i++) {
-            findNamespaces(namespaces, nl.item(i));
+            findNamespaces(namespaces, locations, nl.item(i));
         }
     }
 
@@ -308,11 +333,47 @@ public class Parser {
     }
 
     public void validate(Schema schema) {
+        validate(schema, null);
+    }
+
+    public void validate(Schema schema, ErrorHandler errorHandler) {
         try {
             Validator validator = schema.newValidator();
+            if (errorHandler != null) {
+                validator.setErrorHandler(errorHandler);
+            }
             for (Document doc : this.documents) {
                 validator.validate(new DOMSource(doc));
             }
+        } catch (Exception e) {
+            throw new ComponentDefinitionException("Unable to validate xml", e);
+        }
+    }
+
+    public void validatePsvi(Schema schema) {
+        try {
+            // In order to support validation with the built-in xml parser
+            // from the JDK, we can't use Validator.validate(source, result)
+            // as it fails with an exception, see
+            //   https://issues.apache.org/jira/browse/XERCESJ-1212
+            // This was fixed in xerces 2.9.0 years ago but still is not
+            // included in my JDK.
+            List<String> locations = new ArrayList<String>();
+            for (Document doc : documents) {
+                locations.add(doc.getDocumentURI());
+            }
+            List<Document> validated = new ArrayList<Document>();
+            for (String location : locations) {
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(true);
+                factory.setSchema(schema);
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                InputSource inputSource = new InputSource(location);
+                Document doc = builder.parse(inputSource);
+                validated.add(doc);
+            }
+            this.documents.clear();
+            this.documents.addAll(validated);
         } catch (Exception e) {
             throw new ComponentDefinitionException("Unable to validate xml", e);
         }
@@ -1313,7 +1374,7 @@ public class Parser {
         return getNamespaceHandler(ns);
     }
 
-    private NamespaceHandler getNamespaceHandler(URI uri) {
+    public NamespaceHandler getNamespaceHandler(URI uri) {
         if (handlers == null) {
             throw new ComponentDefinitionException("Unsupported node (namespace handler registry is not set): " + uri);
         }
@@ -1353,14 +1414,7 @@ public class Parser {
 
     /**
      * Test if this namespace uri does not require a Namespace Handler.<p>
-     *      <li>    XMLConstants.RELAXNG_NS_URI
-     *      <li>    XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI
-     *      <li>    XMLConstants.W3C_XML_SCHEMA_NS_URI
-     *      <li>    XMLConstants.W3C_XPATH_DATATYPE_NS_URI
-     *      <li>    XMLConstants.W3C_XPATH_DATATYPE_NS_URI
-     *      <li>    XMLConstants.XML_DTD_NS_URI
-     *      <li>    XMLConstants.XML_NS_URI
-     *      <li>    XMLConstants.XMLNS_ATTRIBUTE_NS_URI
+     * 
      * @param ns URI to be tested.
      * @return true if the uri does not require a namespace handler.
      */
@@ -1411,5 +1465,4 @@ public class Parser {
         }
         return documentBuilderFactory;
     }
-
 }

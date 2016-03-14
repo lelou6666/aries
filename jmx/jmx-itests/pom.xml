@@ -22,27 +22,20 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.apache.aries</groupId>
-        <artifactId>parent</artifactId>
-        <version>2.0.0</version>
-        <relativePath>../../parent/pom.xml</relativePath>
-    </parent>
+        <groupId>org.apache.aries.jmx</groupId>
+        <artifactId>org.apache.aries.jmx.parent</artifactId>
+        <version>1.1.6-SNAPSHOT</version>
+        <relativePath>../jmx-parent</relativePath>
+    </parent>  
 
     <groupId>org.apache.aries.jmx</groupId>
     <artifactId>org.apache.aries.jmx.itests</artifactId>
     <packaging>jar</packaging>
     <name>Apache Aries JMX integration tests</name>
-    <version>1.1.0-SNAPSHOT</version>
     <description>
        Integration tests for the JMX component (using the standalone composite jmx-bundle)
     </description>
 
-    <scm>
-        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/jmx/jmx-itests</connection>
-        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/jmx/jmx-itests</developerConnection>
-        <url>http://svn.apache.org/viewvc/aries/trunk/jmx/jmx-itests</url>
-    </scm>
-     
      <properties>
         <exam.version>3.4.0</exam.version>
         <url.version>1.6.0</url.version>
@@ -52,36 +45,36 @@
         <dependency>
             <groupId>org.apache.aries.jmx</groupId>
             <artifactId>org.apache.aries.jmx</artifactId>
-            <version>1.1.2-SNAPSHOT</version>
+            <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.aries.jmx</groupId>
             <artifactId>org.apache.aries.jmx.api</artifactId>
-            <version>1.1.1</version>
+            <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.aries.jmx</groupId>
             <artifactId>org.apache.aries.jmx.core</artifactId>
-            <version>1.1.2</version>
+            <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.aries.jmx</groupId>
             <artifactId>org.apache.aries.jmx.blueprint</artifactId>
-            <version>1.1.2-SNAPSHOT</version>
+            <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.aries.jmx</groupId>
             <artifactId>org.apache.aries.jmx.whiteboard</artifactId>
-            <version>1.1.0-SNAPSHOT</version>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.aries.jmx</groupId>
             <artifactId>org.apache.aries.jmx.core.whiteboard</artifactId>
-            <version>1.1.2-SNAPSHOT</version>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.osgi</groupId>

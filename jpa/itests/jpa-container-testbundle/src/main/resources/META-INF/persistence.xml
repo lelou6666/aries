@@ -35,10 +35,27 @@
         <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(ForeignKeys=true)"/>
         <property name="openjpa.jdbc.DBDictionary" value="derby"/>
 
+        <property name="eclipselink.ddl-generation" value="drop-and-create-tables"/>
         <property name="hibernate.dialect" value="org.hibernate.dialect.DerbyTenSevenDialect"/>
         <property name="hibernate.hbm2ddl.auto" value="create-drop"/>
     </properties>
   </persistence-unit>
+  
+   <persistence-unit name="xa-test-unit" transaction-type="JTA">
+     <description>Test persistence unit for the JPA Container advanced iTests</description>
+     <properties>
+       <property name="javax.persistence.jdbc.driver" value="org.apache.derby.jdbc.EmbeddedDriver-pool-xa" />
+       <property name="javax.persistence.jdbc.url" value="jdbc:derby:memory:XATEST;create=true" />
+
+        <!-- These properties are creating the database on the fly. We are using them to avoid the tests having to create a database -->
+        <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(ForeignKeys=true)" />
+        <property name="openjpa.jdbc.DBDictionary" value="derby" />
+        <property name="eclipselink.ddl-generation" value="drop-and-create-tables"/>
+        <property name="hibernate.dialect" value="org.hibernate.dialect.DerbyTenSevenDialect" />
+        <property name="hibernate.hbm2ddl.auto" value="create-drop" />
+        <property name="openjpa.Log" value="DefaultLevel=WARN, Runtime=TRACE, Tool=INFO"/>
+        </properties>
+    </persistence-unit>
 
   <persistence-unit name="dsf-test-unit" transaction-type="RESOURCE_LOCAL">
     <description>Test persistence unit for the JPA Container DataSourceFactory iTests</description>
@@ -46,9 +63,11 @@
         <!-- These properties are creating the database on the fly. We are using them to avoid the tests having
           to create a database  -->
         <property name="javax.persistence.jdbc.driver" value="org.apache.derby.jdbc.EmbeddedDriver"/>
-        <property name="javax.persistence.jdbc.url" value="jdbc:derby:memory:TEST;create=true"/>
+        <property name="javax.persistence.jdbc.url" value="jdbc:derby:memory:DSFTEST;create=true"/>
+
         <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(ForeignKeys=true)"/>
         <property name="openjpa.jdbc.DBDictionary" value="derby"/>
+        <property name="eclipselink.ddl-generation" value="drop-and-create-tables"/>
         <property name="hibernate.dialect" value="org.hibernate.dialect.DerbyTenSevenDialect"/>
         <property name="hibernate.hbm2ddl.auto" value="create-drop"/>
     </properties>
@@ -57,14 +76,14 @@
   <persistence-unit name="dsf-xa-test-unit" transaction-type="JTA">
     <description>Test persistence unit for the JPA Container DataSourceFactory iTests</description>
     <properties>
-     <!-- These properties are creating the database on the fly. We are using them to avoid the tests having
-          to create a database  -->
-        <property name="javax.persistence.jdbc.driver" value="org.apache.derby.jdbc.EmbeddedDriver-pool-xa"/>
-        <property name="javax.persistence.jdbc.url" value="jdbc:derby:memory:TEST;create=true"/>
-        <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(ForeignKeys=true)"/>
-        <property name="openjpa.jdbc.DBDictionary" value="derby"/>
-        <property name="hibernate.dialect" value="org.hibernate.dialect.DerbyTenSevenDialect"/>
-        <property name="hibernate.hbm2ddl.auto" value="create-drop"/>
+      <!-- These properties are creating the database on the fly. We are using them to avoid the tests having to create a database  -->     <property name="javax.persistence.jdbc.driver" value="org.apache.derby.jdbc.EmbeddedDriver-pool-xa"/>
+      <property name="javax.persistence.jdbc.url" value="jdbc:derby:memory:DSFXATEST;create=true"/>
+
+      <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(ForeignKeys=true)"/>
+      <property name="openjpa.jdbc.DBDictionary" value="derby"/>
+      <property name="eclipselink.ddl-generation" value="drop-and-create-tables"/>
+      <property name="hibernate.dialect" value="org.hibernate.dialect.DerbyTenSevenDialect"/>
+      <property name="hibernate.hbm2ddl.auto" value="create-drop"/>
     </properties>
   </persistence-unit>
 </persistence>

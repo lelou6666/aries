@@ -24,14 +24,14 @@
     <parent>
         <groupId>org.apache.aries</groupId>
         <artifactId>parent</artifactId>
-        <version>2.0.0</version>
+        <version>2.0.1</version>
         <relativePath>../../parent/pom.xml</relativePath>
     </parent>
 
     <groupId>org.apache.aries.transaction</groupId>
     <artifactId>org.apache.aries.transaction.blueprint</artifactId>
     <packaging>bundle</packaging>
-    <version>1.0.3-SNAPSHOT</version>
+    <version>2.2.0-SNAPSHOT</version>
     <name>Apache Aries Transaction Blueprint</name>
 
     <scm>
@@ -43,14 +43,12 @@
     <properties>
         <!-- Export package versions are maintained in packageinfo files -->
         <aries.osgi.export.pkg>
-            org.apache.aries.transaction.exception,
-            org.apache.aries.transaction.annotations
         </aries.osgi.export.pkg>
         <aries.osgi.private.pkg>
             org.apache.aries.transaction,
             org.apache.aries.transaction.parsing
         </aries.osgi.private.pkg>
-        <lastReleaseVersion>1.0.1</lastReleaseVersion>
+        <lastReleaseVersion>1.1.0</lastReleaseVersion>
     </properties>
 
     <dependencies>
@@ -60,9 +58,9 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.apache.geronimo.specs</groupId>
-            <artifactId>geronimo-jta_1.1_spec</artifactId>
-            <version>1.1.1</version>
+            <groupId>org.osgi</groupId>
+            <artifactId>org.osgi.compendium</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.aries.blueprint</groupId>
@@ -71,21 +69,17 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.apache.aries.testsupport</groupId>
-            <artifactId>org.apache.aries.testsupport.unit</artifactId>
-            <scope>test</scope>
-            <version>1.0.0</version>
-        </dependency>
-        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.compendium</artifactId>
-            <scope>test</scope>
+            <groupId>javax.transaction</groupId>
+            <artifactId>javax.transaction-api</artifactId>
+            <version>1.2</version>
+            <scope>provided</scope>
         </dependency>
+
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
@@ -96,7 +90,12 @@
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.easymock</groupId>
+            <artifactId>easymock</artifactId>
+            <version>3.3.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

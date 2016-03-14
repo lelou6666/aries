@@ -38,7 +38,6 @@ import org.apache.aries.jpa.container.weaving.impl.TransformerRegistry;
 import org.apache.aries.jpa.container.weaving.impl.TransformerRegistrySingleton;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.wiring.BundleWiring;
-import org.osgi.service.packageadmin.PackageAdmin;
 
 public class PersistenceUnit implements PersistenceUnitInfo {
 
@@ -65,7 +64,7 @@ public class PersistenceUnit implements PersistenceUnitInfo {
         this.transactionType = transactionType;
         this.props = new Properties();
         this.classLoader = bundle.adapt(BundleWiring.class).getClassLoader();
-        this.classNames = new HashSet<>();
+        this.classNames = new HashSet<String>();
     }
 
     public void addClassName(String className) {
@@ -96,10 +95,9 @@ public class PersistenceUnit implements PersistenceUnitInfo {
         return this.classLoader;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public List<URL> getJarFileUrls() {
-        return Collections.EMPTY_LIST;
+        return Collections.emptyList();
     }
 
     @Override
@@ -113,15 +111,12 @@ public class PersistenceUnit implements PersistenceUnitInfo {
 
     @Override
     public List<String> getManagedClassNames() {
-        ArrayList<String> names = new ArrayList<>();
-        names.addAll(classNames);
-        return names;
+        return new ArrayList<String>(classNames);
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public List<String> getMappingFileNames() {
-        return Collections.EMPTY_LIST;
+        return Collections.emptyList();
     }
 
     public String getName() {
@@ -218,7 +213,7 @@ public class PersistenceUnit implements PersistenceUnitInfo {
         this.validationMode = validationMode;
     }
 
-    public void addAnnotated(PackageAdmin packageAdmin) {
+    public void addAnnotated() {
         if (!excludeUnlistedClasses()) {
             Collection<String> detected = JPAAnnotationScanner.findJPAAnnotatedClasses(bundle);
             for (String name : detected) {

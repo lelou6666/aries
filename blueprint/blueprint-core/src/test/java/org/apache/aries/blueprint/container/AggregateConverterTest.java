@@ -19,11 +19,14 @@
 package org.apache.aries.blueprint.container;
 
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Constructor;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +34,10 @@ import java.util.Properties;
 
 import junit.framework.TestCase;
 import org.apache.aries.blueprint.TestBlueprintContainer;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.MyClass;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.MyObject;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.Tata;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.Toto;
 import org.osgi.service.blueprint.container.ReifiedType;
 import org.osgi.service.blueprint.container.Converter;
 
@@ -191,6 +198,14 @@ public class AggregateConverterTest extends TestCase {
         assertNull(result);
     }
 
+    public void testGenericWilcard() throws Exception {
+        Constructor cns = MyClass.class.getConstructor(MyObject.class);
+        assertTrue(AggregateConverter.isAssignable(new Toto(), new GenericType(cns.getGenericParameterTypes()[0])));
+
+        cns = Tata.class.getConstructor(MyObject.class);
+        assertTrue(AggregateConverter.isAssignable(new Toto(), new GenericType(cns.getGenericParameterTypes()[0])));
+    }
+
     public void testGenericAssignable() throws Exception {
         AggregateConverter s = new AggregateConverter(new TestBlueprintContainer(null));
 
@@ -223,6 +238,34 @@ public class AggregateConverterTest extends TestCase {
         }
 
         assertNotNull(s.convert(Arrays.asList(new EuRegion() {}), new GenericType(List.class, new GenericType(Region.class))));
+    }
+
+    public void testConvertCompatibleCollections() throws Exception {
+        Object org = Arrays.asList(Arrays.asList(1, 2), Arrays.asList(3, 4));
+        Object obj = service.convert(org,
+                GenericType.parse("java.util.List<java.util.List<java.lang.Integer>>", getClass().getClassLoader()));
+        assertSame(org, obj);
+
+        org = Collections.singletonMap("foo", 1);
+        obj = service.convert(org,
+                GenericType.parse("java.util.Map<java.lang.String,java.lang.Integer>", getClass().getClassLoader()));
+        assertSame(org, obj);
+
+        org = new int[] { 1, 2 };
+        obj = service.convert(org,
+                GenericType.parse("int[]", getClass().getClassLoader()));
+        assertSame(org, obj);
+
+        org = new Object[] { 1, 2 };
+        obj = service.convert(org,
+                GenericType.parse("int[]", getClass().getClassLoader()));
+        assertNotSame(org, obj);
+
+        Hashtable<String, Integer> ht = new Hashtable<String, Integer>();
+        ht.put("foo", 1);
+        org = ht;
+        obj = service.convert(org, GenericType.parse("java.util.Dictionary<java.lang.String,java.lang.Integer>", getClass().getClassLoader()));
+        assertSame(org, obj);;
     }
     
     private interface Region {} 

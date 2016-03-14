@@ -19,17 +19,21 @@
 package org.apache.aries.jpa.support.impl;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 
 import org.apache.aries.jpa.supplier.EmSupplier;
+import org.osgi.service.coordinator.Coordination;
+import org.osgi.service.coordinator.Coordinator;
+import org.osgi.service.coordinator.Participant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,35 +45,26 @@ import org.slf4j.LoggerFactory;
  */
 public class EMSupplierImpl implements EmSupplier {
     private static final long DEFAULT_SHUTDOWN_WAIT_SECS = 10;
-    private static Logger LOG = LoggerFactory.getLogger(EMSupplierImpl.class);
+    private static final Logger LOG = LoggerFactory.getLogger(EMSupplierImpl.class);
     private EntityManagerFactory emf;
     private AtomicBoolean shutdown;
     private long shutdownWaitTime = DEFAULT_SHUTDOWN_WAIT_SECS;
     private TimeUnit shutdownWaitTimeUnit = TimeUnit.SECONDS;
 
-    private final ThreadLocal<EntityManager> localEm;
-
-    // Counts how deeply nested the calls on this EM are
-    private final ThreadLocal<AtomicInteger> usageCount;
     private Set<EntityManager> emSet;
     private CountDownLatch emsToShutDown;
-    
+    private Coordinator coordinator;
+    private String unitName;
 
-    public EMSupplierImpl(final EntityManagerFactory emf) {
+    public EMSupplierImpl(String unitName, final EntityManagerFactory emf, Coordinator coordinator) {
+        this.unitName = unitName;
         this.emf = emf;
+        this.coordinator = coordinator;
         this.shutdown = new AtomicBoolean(false);
-        this.localEm = new ThreadLocal<EntityManager>();
         this.emSet = Collections.newSetFromMap(new ConcurrentHashMap<EntityManager, Boolean>());
-        this.usageCount = new ThreadLocal<AtomicInteger>() {
-            @Override
-            protected AtomicInteger initialValue() {
-                return new AtomicInteger(0);
-            }
-        };
     }
 
     private EntityManager createEm(EntityManagerFactory emf) {
-        LOG.debug("Creating EntityManager");
         EntityManager em = emf.createEntityManager();
         emSet.add(em);
         return em;
@@ -81,46 +76,75 @@ public class EMSupplierImpl implements EmSupplier {
      */
     @Override
     public EntityManager get() {
-        EntityManager em = this.localEm.get();
+        Coordination coordination = getTopCoordination();
+        if (coordination == null) {
+            throw new IllegalStateException("Need active coordination");
+        }
+        EntityManager em = getEm(coordination);
         if (em == null) {
-            LOG.warn("No EntityManager present on this thread. Remember to call preCall() first");
+            LOG.debug("Creating EntityManager for persistence unit " + unitName + ", coordination " + coordination.getName());
+            em = createEm(emf);
+            emSet.add(em);
+            setEm(coordination, em);
+            coordination.addParticipant(new EmShutDownParticipant());
         }
         return em;
     }
+    
+    Coordination getTopCoordination() {
+        Coordination coordination = coordinator.peek();
+        while (coordination != null && coordination.getEnclosingCoordination() != null) {
+            coordination = coordination.getEnclosingCoordination();
+        }
+        return coordination;
+    }
+    
+    private void setEm(Coordination coordination, EntityManager em) {
+        Map<Class<?>, Object> vars = coordination.getVariables();
+        synchronized (vars) {
+            Map<String, EntityManager> emMap = getEmMap(coordination);
+            emMap.put(unitName, em);
+        }
+    }
 
+    /**
+     * Get EntityManager from outer most Coordination that holds an EM
+     * @param coordination
+     * @return
+     */
+    private EntityManager getEm(Coordination coordination) {
+        Map<Class<?>, Object> vars = coordination.getVariables();
+        synchronized (vars) {
+            return getEmMap(coordination).get(unitName);
+        }
+    }
+
+    private EntityManager removeEm(Coordination coordination) {
+        Map<Class<?>, Object> vars = coordination.getVariables();
+        synchronized (vars) {
+            return getEmMap(coordination).remove(unitName);
+        }
+    }
+
+    
+    @SuppressWarnings("unchecked")
+    private Map<String, EntityManager> getEmMap(Coordination coordination) {
+        Map<String, EntityManager> emMap = (Map<String, EntityManager>)coordination.getVariables().get(EntityManager.class);
+        if (emMap == null) {
+            emMap = new HashMap<String, EntityManager>();
+            coordination.getVariables().put(EntityManager.class, emMap);
+        }
+        return emMap;
+    }
 
     @Override
     public void preCall() {
-        if (shutdown.get()) {
-            throw new IllegalStateException("This EntityManagerFactory is being shut down. Can not enter a new EM enabled method");
-        }
-        int count = this.usageCount.get().incrementAndGet();
-        if (count == 1) {
-            EntityManager em = createEm(emf);
-            emSet.add(em);
-            localEm.set(em);
-        }
+        // Just for backward compatibility
     }
 
     @Override
     public void postCall() {
-        int count = this.usageCount.get().decrementAndGet();
-        if (count == 0) {
-            // Outermost call finished
-            closeAndRemoveLocalEm();
-        } else if (count < 0) {
-            throw new IllegalStateException("postCall() called without corresponding preCall()");
-        }
-    }
-
-    private synchronized void closeAndRemoveLocalEm() {
-        EntityManager em = localEm.get();
-        em.close();
-        emSet.remove(em);
-        localEm.remove();
-        if (shutdown.get()) {
-            emsToShutDown.countDown();
-        }
+        // Just for backward compatibility
     }
 
     /**
@@ -137,12 +161,13 @@ public class EMSupplierImpl implements EmSupplier {
         try {
             emsToShutDown.await(shutdownWaitTime, shutdownWaitTimeUnit);
         } catch (InterruptedException e) {
+            LOG.debug("Close was interrupted", e);
         }
         return shutdownRemaining();
     }
 
     private synchronized boolean shutdownRemaining() {
-        boolean clean = (emSet.size() == 0); 
+        boolean clean = emSet.isEmpty(); 
         if  (!clean) {
             LOG.warn("{} EntityManagers still open after timeout. Shutting them down now", emSet.size());
         }
@@ -153,7 +178,7 @@ public class EMSupplierImpl implements EmSupplier {
         return clean;
     }
 
-    private void closeEm(EntityManager em) {
+    private static void closeEm(EntityManager em) {
         try {
             if (em.isOpen()) {
                 em.close();
@@ -166,5 +191,25 @@ public class EMSupplierImpl implements EmSupplier {
     public void setShutdownWait(long shutdownWaitTime, TimeUnit shutdownWaitTimeUnit) {
         this.shutdownWaitTime = shutdownWaitTime;
         this.shutdownWaitTimeUnit = shutdownWaitTimeUnit;
+    }
+
+    private final class EmShutDownParticipant implements Participant {
+        @Override
+        public void failed(Coordination coordination) throws Exception {
+            LOG.debug("Coordination failed " + coordination.getName(), coordination.getFailure());
+            ended(coordination);
+        }
+
+        @Override
+        public void ended(Coordination coordination) throws Exception {
+            LOG.debug("Closing EntityManager for persistence unit " + unitName + " as coordination " + coordination.getName() + " ended.");
+            EntityManager em = removeEm(coordination);
+            emSet.remove(em);
+            em.close();
+            
+            if (shutdown.get()) {
+                emsToShutDown.countDown();
+            }
+        }
     }
 }

@@ -50,6 +50,10 @@ public class BundleRevisionResourceTest {
     public void testNoModellerServiceCapabilities() {
         BundleRevision br = createNiceMock(BundleRevision.class);
         expect(br.getCapabilities(anyObject(String.class))).andReturn(Collections.<Capability>emptyList());
+<<<<<<< HEAD
+=======
+        expect(br.getRequirements(anyObject(String.class))).andReturn(Collections.<Requirement>emptyList());
+>>>>>>> refs/remotes/apache/trunk
         replay(br);
         BundleRevisionResource brr = new BundleRevisionResource(br);
         assertEquals(0, brr.getCapabilities("osgi.service").size());
@@ -59,6 +63,10 @@ public class BundleRevisionResourceTest {
     public void testNoModellerServiceRequirements() {
         BundleRevision br = EasyMock.createNiceMock(BundleRevision.class);
         expect(br.getRequirements(anyObject(String.class))).andReturn(Collections.<Requirement>emptyList());
+<<<<<<< HEAD
+=======
+        expect(br.getCapabilities(anyObject(String.class))).andReturn(Collections.<Capability>emptyList());
+>>>>>>> refs/remotes/apache/trunk
         replay(br);
         BundleRevisionResource brr = new BundleRevisionResource(br);
         assertEquals(0, brr.getRequirements("osgi.service").size());

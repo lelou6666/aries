@@ -40,6 +40,8 @@ import org.apache.aries.blueprint.mutable.MutableRefMetadata;
 import org.apache.aries.blueprint.mutable.MutableReferenceMetadata;
 import org.apache.aries.blueprint.mutable.MutableValueMetadata;
 import org.apache.aries.blueprint.utils.ServiceListener;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.FrameworkUtil;
 import org.osgi.service.blueprint.container.ComponentDefinitionException;
 import org.osgi.service.blueprint.reflect.BeanMetadata;
 import org.osgi.service.blueprint.reflect.BeanProperty;
@@ -85,7 +87,10 @@ public class CmNamespaceHandler implements NamespaceHandler {
     public static final String BLUEPRINT_EXT_NAMESPACE_V1_0 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.0.0";
     public static final String BLUEPRINT_EXT_NAMESPACE_V1_1 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.1.0";
     public static final String BLUEPRINT_EXT_NAMESPACE_V1_2 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.2.0";
-    
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_3 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.3.0";
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_4 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.4.0";
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_5 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.5.0";
+
     public static final String PROPERTY_PLACEHOLDER_ELEMENT = "property-placeholder";
     public static final String MANAGED_PROPERTIES_ELEMENT = "managed-properties";
     public static final String MANAGED_SERVICE_FACTORY_ELEMENT = "managed-service-factory";
@@ -145,7 +150,7 @@ public class CmNamespaceHandler implements NamespaceHandler {
     }
 
     public void setConfigAdmin(ConfigurationAdmin configAdmin) {
-        this.configAdmin = configAdmin;
+        CmNamespaceHandler.configAdmin = configAdmin;
     }
 
     public URL getSchemaLocation(String namespace) {
@@ -157,6 +162,15 @@ public class CmNamespaceHandler implements NamespaceHandler {
             return getClass().getResource("blueprint-cm-1.1.0.xsd");
         } else if (BLUEPRINT_CM_NAMESPACE_1_0.equals(namespace)) {
             return getClass().getResource("blueprint-cm-1.0.0.xsd");
+        } else if (namespace.startsWith("http://aries.apache.org/blueprint/xmlns/blueprint-ext")) {
+            try {
+                Bundle extBundle = FrameworkUtil.getBundle(PlaceholdersUtils.class);
+                Class<?> extNsHandlerClazz = extBundle.loadClass("org.apache.aries.blueprint.ext.impl.ExtNamespaceHandler");
+                return ((NamespaceHandler) extNsHandlerClazz.newInstance()).getSchemaLocation(namespace);
+            } catch (Throwable t) {
+                LOGGER.warn("Could not locate ext namespace schema", t);
+                return null;
+            }
         } else {
             return null;
         }
@@ -309,6 +323,12 @@ public class CmNamespaceHandler implements NamespaceHandler {
         systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_1, SYSTEM_PROPERTIES_ATTRIBUTE);
       } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_2, SYSTEM_PROPERTIES_ATTRIBUTE)) {
         systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_2, SYSTEM_PROPERTIES_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_3, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_3, SYSTEM_PROPERTIES_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_4, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_4, SYSTEM_PROPERTIES_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_5, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_5, SYSTEM_PROPERTIES_ATTRIBUTE);
       }
       return systemProperties;
     }
@@ -320,7 +340,13 @@ public class CmNamespaceHandler implements NamespaceHandler {
       } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_1, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
         ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_1, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
       } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_2, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
-        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_1, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_2, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_3, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_3, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_4, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_4, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_5, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_5, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
       }
       return ignoreMissingLocations;
     }
@@ -601,7 +627,9 @@ public class CmNamespaceHandler implements NamespaceHandler {
     public static boolean isExtNamespace(String uri) {
         return BLUEPRINT_EXT_NAMESPACE_V1_0.equals(uri)
                 || BLUEPRINT_EXT_NAMESPACE_V1_1.equals(uri)
-                || BLUEPRINT_EXT_NAMESPACE_V1_2.equals(uri);
+                || BLUEPRINT_EXT_NAMESPACE_V1_2.equals(uri)
+                || BLUEPRINT_EXT_NAMESPACE_V1_3.equals(uri)
+                || BLUEPRINT_EXT_NAMESPACE_V1_4.equals(uri);
     }
 
     public String getId(ParserContext context, Element element) {

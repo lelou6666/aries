@@ -15,50 +15,20 @@
  */
 package org.apache.aries.jpa.container.itest;
 
-import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
-
-import org.apache.aries.jpa.container.itest.entities.Car;
-import org.apache.aries.jpa.itest.AbstractJPAItest;
-import org.junit.Test;
 import org.ops4j.pax.exam.Configuration;
 import org.ops4j.pax.exam.Option;
 
-public class JPAContainerHibernateTest extends AbstractJPAItest {
-    @Test
-    public void testCarCreateDelete() throws Exception {
-        resolveBundles();
-        EntityManagerFactory emf = getEMF(TEST_UNIT);
-        EntityManager em = emf.createEntityManager();
-        em.getTransaction().begin();
-        Car c = new Car();
-        c.setNumberPlate("123456");
-        c.setColour("blue");
-        em.persist(c);
-        em.getTransaction().commit();
-        em.close();
-
-        em = emf.createEntityManager();
-        em.getTransaction().begin();
-        deleteCar(em, c);
-        em.getTransaction().commit();
-        em.close();
-    }
-
-    private void deleteCar(EntityManager em, Car c) {
-        c = em.merge(c);
-        em.remove(c);
-    }
+public class JPAContainerHibernateTest extends JPAContainerTest {
 
     @Configuration
     public Option[] configuration() {
         return new Option[] {
             baseOptions(), //
             ariesJpa20(), //
+            derbyDSF(), //
+            jta12Bundles(), //
+            hibernate(), //
             testBundle(), //
-            transactionWrapper(), //
-            testDs(), //
-            hibernate()
         };
     }
 }

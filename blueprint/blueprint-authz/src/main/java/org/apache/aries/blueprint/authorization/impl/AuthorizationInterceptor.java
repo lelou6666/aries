@@ -39,6 +39,11 @@ import org.slf4j.LoggerFactory;
 
 public class AuthorizationInterceptor implements Interceptor {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthorizationInterceptor.class);
+    private Class<?> beanClass;
+
+    public AuthorizationInterceptor(Class<?> beanClass) {
+        this.beanClass = beanClass;
+    }
 
     public int getRank() {
         return 0;
@@ -52,7 +57,7 @@ public class AuthorizationInterceptor implements Interceptor {
     }
 
     public Object preCall(ComponentMetadata cm, Method m, Object... parameters) throws Throwable {
-        Annotation ann = new SecurityAnotationParser().getEffectiveAnnotation(m);
+        Annotation ann = new SecurityAnotationParser().getEffectiveAnnotation(beanClass, m);
         if (ann instanceof PermitAll) {
             return null;
         }
@@ -68,18 +73,15 @@ public class AuthorizationInterceptor implements Interceptor {
         }
         Set<Principal> principals = subject.getPrincipals();
 
-
         for (Principal principal : principals) {
             if (roles.contains(principal.getName())) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Granting access to Method: " + m + " for " + principal);
-                }
+                LOGGER.debug("Granting access to Method: {} for {}.", m, principal);
                 return null;
             }
         }
-
-        throw new AccessControlException("Method call " + m.getDeclaringClass() + "." + m.getName() + " denied. Roles allowed are " + roles + ". " 
-                                         + "Your principals are " + getNames(principals) +".");
+        String msg = String.format("Method call %s.%s denied. Roles allowed are %s. Your principals are %s.",
+                                   m.getDeclaringClass(), m.getName(), roles, getNames(principals));
+        throw new AccessControlException(msg);
     }
 
     private String getNames(Set<Principal> principals) {

@@ -14,13 +14,13 @@
 package org.apache.aries.subsystem.core.internal;
 
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 import org.apache.aries.util.io.IOUtils;
 import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleException;
 import org.osgi.framework.Version;
 import org.osgi.framework.startlevel.BundleStartLevel;
 import org.osgi.framework.wiring.BundleCapability;
@@ -32,7 +32,10 @@ import org.osgi.resource.Capability;
 import org.osgi.resource.Requirement;
 import org.osgi.resource.Resource;
 import org.osgi.service.coordinator.Coordination;
+<<<<<<< HEAD
 import org.osgi.service.coordinator.Participant;
+=======
+>>>>>>> refs/remotes/apache/trunk
 import org.osgi.service.subsystem.SubsystemException;
 
 public class BundleResourceInstaller extends ResourceInstaller {
@@ -170,10 +173,17 @@ public class BundleResourceInstaller extends ResourceInstaller {
 	
 	public Resource install() {
 		BundleRevision revision;
-		if (resource instanceof BundleRevision)
+		if (resource instanceof BundleRevision) {
 			revision = (BundleRevision)resource;
+		}
+		else if (resource instanceof BundleRevisionResource) {
+		    revision = ((BundleRevisionResource)resource).getRevision();
+		}
 		else {
+<<<<<<< HEAD
 			ThreadLocalSubsystem.set(provisionTo);
+=======
+>>>>>>> refs/remotes/apache/trunk
 			try {
 				revision = installBundle();
 			}
@@ -188,29 +198,25 @@ public class BundleResourceInstaller extends ResourceInstaller {
 	
 	private BundleRevision installBundle() throws Exception {
 		final Bundle bundle;
+<<<<<<< HEAD
 		InputStream is = (InputStream)resource.getClass().getMethod("getContent").invoke(resource);
+=======
+		Method getContent = resource.getClass().getMethod("getContent");
+		getContent.setAccessible(true);
+		InputStream is = (InputStream)getContent.invoke(resource);
+		ThreadLocalSubsystem.set(provisionTo);
+>>>>>>> refs/remotes/apache/trunk
 		try {
 			bundle = provisionTo.getRegion().installBundleAtLocation(getLocation(), is);
 		}
-		catch (BundleException e) {
-			throw new SubsystemException(e);
-		}
 		finally {
+			ThreadLocalSubsystem.remove();
 			// Although Region.installBundle ultimately calls BundleContext.install,
 			// which closes the input stream, an exception may occur before this
 			// happens. Also, the Region API does not guarantee the stream will
 			// be closed.
 			IOUtils.close(is);
 		}
-		coordination.addParticipant(new Participant() {
-			public void ended(Coordination coordination) throws Exception {
-				// Nothing
-			}
-
-			public void failed(Coordination coordination) throws Exception {
-				bundle.uninstall();
-			}
-		});
 		// Set the start level of all bundles managed (i.e. installed) by the
 		// subsystems implementation to 1 in case the framework's default bundle
 		// start level has been changed. Otherwise, start failures will occur

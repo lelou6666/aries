@@ -37,10 +37,8 @@ public class RegionUpdater {
 	private final Region tail;
 	
 	public RegionUpdater(Region tail, Region head) {
-		if (tail == null)
-			throw new NullPointerException("Missing required parameter: tail");
 		if (head == null)
-			throw new NullPointerException("Missing required parameter: head");
+			throw new NullPointerException();
 		this.tail = tail;
 		this.head = head;
 		digraph = tail.getRegionDigraph();
@@ -57,7 +55,23 @@ public class RegionUpdater {
 			copy.removeRegion(tail);
 			tail = copy.createRegion(tail.getName());
 			addBundleIds(bundleIds, tail);
-			addRequirements(requirements, heads.get(head.getName()));
+			RegionFilterBuilder builder = heads.get(head.getName());
+			if (builder == null) {
+				// Something outside of the subsystems implementation has
+				// deleted the edge between the parent and child subsystems.
+				// See ARIES-1429.
+				throw new IllegalStateException(
+						new StringBuilder(tail.getName())
+								.append(" not connected to ")
+								.append(head.getName())
+								.toString());
+			}
+			if (requirements == null) {
+				heads.put(head.getName(), null);
+			}
+			else {
+				addRequirements(requirements, builder);
+			}
 			addHeadRegions(heads, tail, copy);
 			addTailRegions(tails, tail, copy);
 			// Replace the current digraph.
@@ -83,8 +97,13 @@ public class RegionUpdater {
 	}
 	
 	private void addHeadRegions(Map<String, RegionFilterBuilder> heads, Region tail, RegionDigraph digraph) throws BundleException {
-		for (Map.Entry<String, RegionFilterBuilder> entry : heads.entrySet())
-			tail.connectRegion(digraph.getRegion(entry.getKey()), entry.getValue().build());
+		for (Map.Entry<String, RegionFilterBuilder> entry : heads.entrySet()) {
+			RegionFilterBuilder builder = entry.getValue();
+			if (builder == null) {
+				continue;
+			}
+			tail.connectRegion(digraph.getRegion(entry.getKey()), builder.build());
+		}
 	}
 	
 	private void addTailRegions(Map<String, RegionFilterBuilder> tails, Region head, RegionDigraph digraph) throws BundleException {

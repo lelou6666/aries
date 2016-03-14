@@ -15,7 +15,6 @@ package org.apache.aries.subsystem.core.internal;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -149,42 +148,65 @@ public class BundleEventHook implements EventHook {
 		BundleRevision originRevision = origin.adapt(BundleRevision.class);
 		Bundle bundle = event.getBundle();
 		BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
-		if (bundleRevision == null)
+		if (bundleRevision == null) {
 			// The event is being processed asynchronously and the installed
 			// bundle has been uninstalled. Nothing we can do.
 			return;
+		}
 		bundleToRevision.put(bundle, bundleRevision);
 		// Only handle explicitly installed bundles. An explicitly installed
 		// bundle is a bundle that was installed using some other bundle's
 		// BundleContext or using RegionDigraph.
-		if (ThreadLocalSubsystem.get() != null)
+		if (ThreadLocalSubsystem.get() != null
+				// Region context bundles must be treated as explicit installations.
+				|| bundleRevision.getSymbolicName().startsWith(Constants.RegionContextBundleSymbolicNamePrefix)) {
 			return;
-		if ("org.eclipse.equinox.region".equals(origin.getSymbolicName()))
-			// The bundle was installed using RegionDigraph.
-			handleExplicitlyInstalledBundleRegionDigraph(origin, bundleRevision);
-		else
-			// The bundle was installed using some other bundle's BundleContext.
-			handleExplicitlyInstalledBundleBundleContext(originRevision, bundleRevision);
+		}
+		// Indicate that a bundle is being explicitly installed on this thread.
+		// This protects against attempts to resolve the bundle as part of
+		// processing the explicit installation.
+		ThreadLocalBundleRevision.set(bundleRevision);
+		try {
+			if ("org.eclipse.equinox.region".equals(origin.getSymbolicName())) {
+				// The bundle was installed using RegionDigraph.
+				handleExplicitlyInstalledBundleRegionDigraph(origin, bundleRevision);
+			}
+			else {
+				// The bundle was installed using some other bundle's BundleContext.
+				handleExplicitlyInstalledBundleBundleContext(originRevision, bundleRevision);
+			}
+		}
+		finally {
+			// Always remove the bundle so that it can be resolved no matter
+			// what happens here.
+			ThreadLocalBundleRevision.remove();
+		}
 	}
 	
 	@SuppressWarnings("unchecked")
 	private void handleUninstalledEvent(BundleEvent event) {
 		Bundle bundle = event.getBundle();
 		BundleRevision revision = bundleToRevision.remove(bundle);
-		if (ThreadLocalSubsystem.get() != null)
+		if (ThreadLocalSubsystem.get() != null
+				|| (revision == null ? false : 
+					// Region context bundles must be treated as explicit installations.
+					revision.getSymbolicName().startsWith(Constants.RegionContextBundleSymbolicNamePrefix))) {
 			return;
+		}
 		Collection<BasicSubsystem> subsystems;
 		if (revision == null) {
 			// The bundle was installed while the bundle event hook was unregistered.
-			Object[] o = Activator.getInstance().getSubsystems().getSubsystemsByBundle(bundle);
+			Object[] o = activator.getSubsystems().getSubsystemsByBundle(bundle);
 			if (o == null)
 				return;
 			revision = (BundleRevision)o[0];
 			subsystems = (Collection<BasicSubsystem>)o[1];
 		}
-		else
-			subsystems = Activator.getInstance().getSubsystems().getSubsystemsByConstituent(new BundleConstituent(null, revision));
-		for (BasicSubsystem subsystem : subsystems)
+		else {
+			subsystems = activator.getSubsystems().getSubsystemsByConstituent(new BundleConstituent(null, revision));
+		}
+		for (BasicSubsystem subsystem : subsystems) {
 			ResourceUninstaller.newInstance(revision, subsystem).uninstall();
+		}
 	}
 }

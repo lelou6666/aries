@@ -19,6 +19,7 @@
 package org.apache.aries.blueprint.authorization.impl;
 
 import java.net.URL;
+import java.util.Collections;
 import java.util.Set;
 
 import org.apache.aries.blueprint.ComponentDefinitionRegistry;
@@ -28,27 +29,34 @@ import org.apache.aries.blueprint.mutable.MutableBeanMetadata;
 import org.apache.aries.blueprint.mutable.MutablePassThroughMetadata;
 import org.osgi.service.blueprint.reflect.ComponentMetadata;
 import org.osgi.service.blueprint.reflect.Metadata;
-
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 public class AuthorizationNsHandler implements NamespaceHandler {
+    private static final String NS_AUTHZ = "http://aries.apache.org/xmlns/authorization/v1.0.0";
 
     private void parseElement(Element elt, ComponentMetadata cm, ParserContext pc) {
         ComponentDefinitionRegistry cdr = pc.getComponentDefinitionRegistry();
         
-        if ("enable".equals(elt.getLocalName())) {
-            if (!cdr.containsComponentDefinition(AuthorizationBeanProcessor.AUTH_PROCESSOR_BEAN_NAME)) {
-                MutableBeanMetadata meta = pc.createMetadata(MutableBeanMetadata.class);
-                meta.setId(AuthorizationBeanProcessor.AUTH_PROCESSOR_BEAN_NAME);
-                meta.setRuntimeClass(AuthorizationBeanProcessor.class);
-                meta.setProcessor(true);
-                MutablePassThroughMetadata cdrMeta = pc.createMetadata(MutablePassThroughMetadata.class);
-                cdrMeta.setObject(cdr);
-                meta.addProperty("cdr", cdrMeta);
-                cdr.registerComponentDefinition(meta);
-            }
+        if ("enable".equals(elt.getLocalName()) && NS_AUTHZ.equals(elt.getNamespaceURI()) 
+            && !cdr.containsComponentDefinition(AuthorizationBeanProcessor.AUTH_PROCESSOR_BEAN_NAME)) {
+            cdr.registerComponentDefinition(authBeanProcessor(pc, cdr));
         }
+    }
+
+    private MutableBeanMetadata authBeanProcessor(ParserContext pc, ComponentDefinitionRegistry cdr) {
+        MutableBeanMetadata meta = pc.createMetadata(MutableBeanMetadata.class);
+        meta.setId(AuthorizationBeanProcessor.AUTH_PROCESSOR_BEAN_NAME);
+        meta.setRuntimeClass(AuthorizationBeanProcessor.class);
+        meta.setProcessor(true);
+        meta.addProperty("cdr", passThrough(pc, cdr));
+        return meta;
+    }
+
+    private MutablePassThroughMetadata passThrough(ParserContext pc, Object o) {
+        MutablePassThroughMetadata meta = pc.createMetadata(MutablePassThroughMetadata.class);
+        meta.setObject(o);
+        return meta;
     }
 
     public ComponentMetadata decorate(Node node, ComponentMetadata cm, ParserContext pc) {
@@ -64,12 +72,16 @@ public class AuthorizationNsHandler implements NamespaceHandler {
     }
 
     public URL getSchemaLocation(String namespace) {
-        return this.getClass().getResource("/authz10.xsd");
+        if (NS_AUTHZ.equals(namespace)) {
+            return this.getClass().getResource("/authz10.xsd");
+        } else {
+            return null;
+        }
     }
 
     @SuppressWarnings("rawtypes")
     public Set<Class> getManagedClasses() {
-        return null;
+        return Collections.emptySet();
     }
 
 }

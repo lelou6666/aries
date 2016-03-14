@@ -14,18 +14,22 @@
 package org.apache.aries.subsystem.core.internal;
 
 import java.io.InputStream;
+<<<<<<< HEAD
 import java.io.IOException;
+=======
+>>>>>>> refs/remotes/apache/trunk
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 
-import org.apache.aries.util.filesystem.ICloseableDirectory;
 import org.apache.aries.util.filesystem.IDirectory;
 import org.osgi.service.coordinator.Coordination;
 import org.osgi.service.coordinator.CoordinationException;
+<<<<<<< HEAD
+=======
+import org.osgi.service.subsystem.Subsystem.State;
+>>>>>>> refs/remotes/apache/trunk
 import org.osgi.service.subsystem.SubsystemException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class InstallAction implements PrivilegedAction<BasicSubsystem> {
 	private final IDirectory content;
@@ -33,7 +37,6 @@ public class InstallAction implements PrivilegedAction<BasicSubsystem> {
 	private final InputStream deploymentManifest;
 	private final String location;
 	private final BasicSubsystem parent;
-	private static final Logger logger = LoggerFactory.getLogger(InstallAction.class);
 	
 	public InstallAction(String location, IDirectory content, BasicSubsystem parent, AccessControlContext context, InputStream deploymentManifest) {
 		this.location = location;
@@ -45,11 +48,14 @@ public class InstallAction implements PrivilegedAction<BasicSubsystem> {
 	
 	@Override
 	public BasicSubsystem run() {
-		// Initialization of a null coordination must be privileged and,
-		// therefore, occur in the run() method rather than in the constructor.
-		Coordination coordination = Utils.createCoordination(parent);
+		// Doesn't appear to be any need of protecting against re-entry in the
+		// case of installation.
 		BasicSubsystem result = null;
+		// Acquire the global write lock to prevent all other operations until
+		// the installation is complete. There is no need to hold any other locks.
+		LockingStrategy.writeLock();
 		try {
+<<<<<<< HEAD
 			TargetRegion region = new TargetRegion(parent);
 			SubsystemResource ssr = new SubsystemResource(location, content, parent);
 			result = Activator.getInstance().getSubsystems().getSubsystemByLocation(location);
@@ -62,16 +68,43 @@ public class InstallAction implements PrivilegedAction<BasicSubsystem> {
 						&& result.getType().equals(ssr.getSubsystemManifest().getSubsystemTypeHeader().getType())))
 					throw new SubsystemException("Location already exists but symbolic name, version, and type are not the same: " + location);
 				return (BasicSubsystem)ResourceInstaller.newInstance(coordination, result, parent).install();
+=======
+			State state = parent.getState();
+			if (State.INSTALLING.equals(state)) {
+				throw new SubsystemException("A child subsystem may not be installed while the parent is in the INSTALLING state");
+>>>>>>> refs/remotes/apache/trunk
 			}
-			result = (BasicSubsystem)region.find(
-					ssr.getSubsystemManifest().getSubsystemSymbolicNameHeader().getSymbolicName(), 
-					ssr.getSubsystemManifest().getSubsystemVersionHeader().getVersion());
-			if (result != null) {
+			// Initialization of a null coordination must be privileged and,
+			// therefore, occur in the run() method rather than in the constructor.
+			Coordination coordination = Utils.createCoordination(parent);
+			try {
+				TargetRegion region = new TargetRegion(parent);
+				SubsystemResource ssr = new SubsystemResource(location, content, parent, coordination);
+				result = Activator.getInstance().getSubsystems().getSubsystemByLocation(location);
+				if (result != null) {
+					if (!region.contains(result))
+						throw new SubsystemException("Location already exists but existing subsystem is not part of target region: " + location);
+					if (!(result.getSymbolicName().equals(ssr.getSubsystemManifest().getSubsystemSymbolicNameHeader().getSymbolicName())
+							&& result.getVersion().equals(ssr.getSubsystemManifest().getSubsystemVersionHeader().getVersion())
+							&& result.getType().equals(ssr.getSubsystemManifest().getSubsystemTypeHeader().getType())))
+						throw new SubsystemException("Location already exists but symbolic name, version, and type are not the same: " + location);
+				}
+				else {
+					result = (BasicSubsystem)region.find(
+							ssr.getSubsystemManifest().getSubsystemSymbolicNameHeader().getSymbolicName(), 
+							ssr.getSubsystemManifest().getSubsystemVersionHeader().getVersion());
+					if (result != null) {
+						if (!result.getType().equals(ssr.getSubsystemManifest().getSubsystemTypeHeader().getType()))
+							throw new SubsystemException("Subsystem already exists in target region but has a different type: " + location);
+					}
+					else {
+						result = new BasicSubsystem(ssr, deploymentManifest);
+					}
+				}
 				checkLifecyclePermission(result);
-				if (!result.getType().equals(ssr.getSubsystemManifest().getSubsystemTypeHeader().getType()))
-					throw new SubsystemException("Subsystem already exists in target region but has a different type: " + location);
 				return (BasicSubsystem)ResourceInstaller.newInstance(coordination, result, parent).install();
 			}
+<<<<<<< HEAD
 			result = new BasicSubsystem(ssr, deploymentManifest);
 			checkLifecyclePermission(result);
 			return (BasicSubsystem)ResourceInstaller.newInstance(coordination, result, parent).install();
@@ -90,25 +123,33 @@ public class InstallAction implements PrivilegedAction<BasicSubsystem> {
 				if (t instanceof SecurityException)
 					throw (SecurityException)t;
 				throw new SubsystemException(t);
+=======
+			catch (Throwable t) {
+				coordination.fail(t);
+>>>>>>> refs/remotes/apache/trunk
 			}
 			finally {
-				closeContentIfIClosable();
+				try {
+					coordination.end();
+				}
+				catch (CoordinationException e) {
+					Throwable t = e.getCause();
+					if (t instanceof SubsystemException)
+						throw (SubsystemException)t;
+					if (t instanceof SecurityException)
+						throw (SecurityException)t;
+					throw new SubsystemException(t);
+				}
 			}
 		}
+<<<<<<< HEAD
+=======
+		finally {
+			// Release the global write lock.
+			LockingStrategy.writeUnlock();
+		}
+>>>>>>> refs/remotes/apache/trunk
 		return result;
-	}
-
-	private void closeContentIfIClosable() {
-		//clean up temp file
-		if (content instanceof ICloseableDirectory) {
-			try{
-				((ICloseableDirectory) content).close();
-			}
-			catch (IOException ioex) {
-				logger.info("Exception calling close for content {}. Exception {}", 
-						content, ioex);					
-			}
-		} 
 	}
 	
 	private void checkLifecyclePermission(final BasicSubsystem subsystem) {

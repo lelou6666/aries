@@ -29,8 +29,6 @@ import org.apache.aries.jpa.container.parser.impl.PersistenceUnitParser;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleEvent;
-import org.osgi.framework.ServiceReference;
-import org.osgi.service.packageadmin.PackageAdmin;
 import org.osgi.util.tracker.BundleTrackerCustomizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,50 +37,68 @@ import org.slf4j.LoggerFactory;
  * Looks for bundles containing a persistence.xml. For each persistence unit
  * found a PersistenceProviderTracker is installed that tracks matching providers.
  */
-@SuppressWarnings("deprecation")
 public class PersistenceBundleTracker implements BundleTrackerCustomizer<Bundle> {
     private static final Logger LOGGER = LoggerFactory.getLogger(PersistenceBundleTracker.class);
-    Map<Bundle, Collection<PersistenceProviderTracker>> trackers;
-    private BundleContext context;
+    private final Map<Bundle, Collection<PersistenceProviderTracker>> trackers;
+    private final BundleContext context;
+    private Map<Integer, String> typeMap;
 
     public PersistenceBundleTracker(BundleContext context) {
         this.context = context;
         trackers = new HashMap<Bundle, Collection<PersistenceProviderTracker>>();
+        this.typeMap = new HashMap<Integer, String>();
+        this.typeMap.put(BundleEvent.INSTALLED, "INSTALLED");
+        this.typeMap.put(BundleEvent.LAZY_ACTIVATION, "LAZY_ACTIVATION");
+        this.typeMap.put(BundleEvent.RESOLVED, "RESOLVED");
+        this.typeMap.put(BundleEvent.STARTED, "STARTED");
+        this.typeMap.put(BundleEvent.STARTING, "Starting");
+        this.typeMap.put(BundleEvent.STOPPED, "STOPPED");
+        this.typeMap.put(BundleEvent.UNINSTALLED, "UNINSTALLED");
+        this.typeMap.put(256, "UNRESOLVED");
+        this.typeMap.put(BundleEvent.UPDATED, "UPDATED");
     }
 
-    public Bundle addingBundle(Bundle bundle, BundleEvent event) {
-        if (getTrackers(bundle).size() == 0) {
-            findPersistenceUnits(bundle);
+    @Override
+    public synchronized Bundle addingBundle(Bundle bundle, BundleEvent event) {
+        if (event != null && event.getType() == BundleEvent.STOPPED) {
+            // Avoid starting persistence units in state STOPPED.
+            // TODO No idea why we are called at all in this state
+            return bundle;
+        }
+        if (getTrackers(bundle).isEmpty()) {
+            findPersistenceUnits(bundle, event);
         }
         return bundle;
     }
 
-    public void removedBundle(Bundle bundle, BundleEvent event, Bundle object) {
-        Collection<PersistenceProviderTracker> providerTrackers = trackers.get(bundle);
-        if (providerTrackers != null) {
-            if (providerTrackers.size() > 0)  {
-                LOGGER.info("removing persistence units for " + bundle.getSymbolicName() + " " + getType(event));
-            }
-            for (PersistenceProviderTracker providerTracker : providerTrackers) {
-                providerTracker.close();
-            }
-            providerTrackers.clear();
-            trackers.remove(bundle);
+    @Override
+    public synchronized void removedBundle(Bundle bundle, BundleEvent event, Bundle object) {
+        Collection<PersistenceProviderTracker> providerTrackers = trackers.remove(bundle);
+        if (providerTrackers == null || providerTrackers.isEmpty()) {
+            return;
         }
+        LOGGER.info("removing persistence units for " + bundle.getSymbolicName() + " " + getType(event));
+        for (PersistenceProviderTracker providerTracker : providerTrackers) {
+            providerTracker.close();
+        }
+        providerTrackers.clear();
     }
 
-    private void findPersistenceUnits(Bundle bundle) {
-        ServiceReference<PackageAdmin> ref = context.getServiceReference(PackageAdmin.class);
-        PackageAdmin packageAdmin = context.getService(ref);
+    private void findPersistenceUnits(Bundle bundle, BundleEvent event) {
         for (PersistenceUnit punit : PersistenceUnitParser.getPersistenceUnits(bundle)) {
-            punit.addAnnotated(packageAdmin);
+            punit.addAnnotated();
             trackProvider(bundle, punit);
         }
-        context.ungetService(ref);
+        if (!getTrackers(bundle).isEmpty()) {
+            LOGGER.info("Persistence units added for bundle " + bundle.getSymbolicName() + " event " + getEventType(event));
+        }
     }
 
-    private void trackProvider(Bundle bundle, 
-                               PersistenceUnit punit) {
+    private static Integer getEventType(BundleEvent event) {
+        return (event != null) ? event.getType() : null;
+    }
+
+    private void trackProvider(Bundle bundle, PersistenceUnit punit) {
         LOGGER.info(String.format("Found persistence unit %s in bundle %s with provider %s.",
                                   punit.getPersistenceUnitName(), bundle.getSymbolicName(),
                                   punit.getPersistenceProviderClassName()));
@@ -93,41 +109,22 @@ public class PersistenceBundleTracker implements BundleTrackerCustomizer<Bundle>
 
     @Override
     public void modifiedBundle(Bundle bundle, BundleEvent event, Bundle object) {
+        // Only interested in added or removed
     }
 
-    private static String getType(BundleEvent event) {
+    private String getType(BundleEvent event) {
         if (event == null) {
             return "null";
         }
         int type = event.getType();
-        switch (type) {
-        case BundleEvent.INSTALLED:
-            return "INSTALLED";
-        case BundleEvent.LAZY_ACTIVATION:
-            return "LAZY_ACTIVATION";
-        case BundleEvent.RESOLVED:
-            return "RESOLVED";
-        case BundleEvent.STARTED:
-            return "STARTED";
-        case BundleEvent.STARTING:
-            return "Starting";
-        case BundleEvent.STOPPED:
-            return "STOPPED";
-        case BundleEvent.UNINSTALLED:
-            return "UNINSTALLED";
-        case BundleEvent.UNRESOLVED:
-            return "UNRESOLVED";
-        case BundleEvent.UPDATED:
-            return "UPDATED";
-        default:
-            return "unknown event type: " + type;
-        }
+        String typeSt = typeMap.get(type);
+        return (typeSt != null) ? typeSt : "unknown event type: " + type;
     }
     
     private Collection<PersistenceProviderTracker> getTrackers(Bundle bundle) {
         Collection<PersistenceProviderTracker> providerTrackers = trackers.get(bundle);
         if (providerTrackers == null) {
-            providerTrackers = new ArrayList<>();
+            providerTrackers = new ArrayList<PersistenceProviderTracker>();
             trackers.put(bundle, providerTrackers);
         }
         return providerTrackers;

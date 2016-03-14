@@ -23,17 +23,17 @@ import org.osgi.framework.BundleContext;
 
 public class Activator implements BundleActivator {
 
-    private EMFTracker emfTracker;
+    private CoordinatorTracker coordinatorTracker;
 
     @Override
     public void start(BundleContext context) throws Exception {
-        emfTracker = new EMFTracker(context);
-        emfTracker.open();
+        coordinatorTracker = new CoordinatorTracker(context);
+        coordinatorTracker.open();
     }
 
     @Override
     public void stop(BundleContext context) throws Exception {
-        emfTracker.close();
+        coordinatorTracker.close();
     }
 
 }

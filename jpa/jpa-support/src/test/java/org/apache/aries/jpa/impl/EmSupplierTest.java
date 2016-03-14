@@ -31,28 +31,72 @@ import javax.persistence.EntityManagerFactory;
 import org.apache.aries.jpa.support.impl.EMSupplierImpl;
 import org.junit.Assert;
 import org.junit.Test;
+import org.osgi.service.coordinator.Coordinator;
 
 public class EmSupplierTest {
 
     @Test
     public void lifeCycleTest() {
         EntityManagerFactory emf = mockEmf();
-        EMSupplierImpl emSupplier = new EMSupplierImpl(emf);
-        
-        Assert.assertNull("No EM may be present at start", emSupplier.get());
+        Coordinator coordinator = new DummyCoordinator();
 
-        emSupplier.preCall();
+        EMSupplierImpl emSupplier = new EMSupplierImpl("myunit", emf, coordinator);
+        assertIllegalState(emSupplier);
+        coordinator.begin("test", 0);
         EntityManager em = emSupplier.get();
         Assert.assertNotNull("EM should be present after preCall", em);
-        emSupplier.preCall();
+        coordinator.begin("testinner", 0);
         Assert.assertSame("Same EM for inner preCall", em, emSupplier.get());
-        
-        emSupplier.postCall();
+        coordinator.pop().end();
         Assert.assertSame("EM must still be the same after inner postCall", em, emSupplier.get());
+        coordinator.pop().end();
+        assertIllegalState(emSupplier);
         
-        emSupplier.postCall();
-        Assert.assertNull("EM must be null after outer postCall", emSupplier.get());
-        
+        boolean clean = emSupplier.close();
+        Assert.assertTrue("Shutdown should be clean", clean);
+    }
+
+
+    private void assertIllegalState(EMSupplierImpl emSupplier) {
+        try {
+            emSupplier.get();
+            Assert.fail(IllegalStateException.class + " expected");
+        } catch (IllegalStateException e) {
+            // Expected
+        }
+    }
+
+    
+    @Test
+    public void uncleanLifeCycleTest() {
+        EntityManagerFactory emf = mockEmf();
+        Coordinator coordinator = new DummyCoordinator();
+        EMSupplierImpl emSupplier = new EMSupplierImpl("myunit", emf, coordinator);
+        emSupplier.setShutdownWait(100, MILLISECONDS);
+        coordinator.begin("test", 0);
+        emSupplier.get();
+        boolean clean = emSupplier.close();
+        Assert.assertFalse("Shutdown should be unclean", clean);
+    }
+    
+    @Test
+    public void asyncCleanLifeCycleTest() throws InterruptedException {
+        EntityManagerFactory emf = mockEmf();
+        final Coordinator coordinator = new DummyCoordinator();
+        final EMSupplierImpl emSupplier = new EMSupplierImpl("myunit", emf,coordinator);
+        final Semaphore preCallSem = new Semaphore(0);
+        Runnable command = new Runnable() {
+            
+            @Override
+            public void run() {
+                coordinator.begin("test", 0);
+                preCallSem.release();
+                coordinator.pop().end();
+            }
+        };
+        Executors.newSingleThreadExecutor().execute(command);
+        preCallSem.acquire();
+        // EMs not closed when close is called but are closed before timeout 
         boolean clean = emSupplier.close();
         Assert.assertTrue("Shutdown should be clean", clean);
     }
@@ -63,36 +107,4 @@ public class EmSupplierTest {
         when(emf.createEntityManager()).thenReturn(em);
         return emf;
     }
-    
-    @Test
-    public void uncleanLifeCycleTest() {
-        EntityManagerFactory emf = mockEmf();
-        EMSupplierImpl emSupplier = new EMSupplierImpl(emf);
-        emSupplier.setShutdownWait(100, MILLISECONDS);
-        emSupplier.preCall();
-        boolean clean = emSupplier.close();
-        Assert.assertFalse("Shutdown should be unclean", clean);
-    }
-    
-    @Test
-    public void asyncCleanLifeCycleTest() throws InterruptedException {
-        EntityManagerFactory emf = mockEmf();
-        final EMSupplierImpl emSupplier = new EMSupplierImpl(emf);
-        final Semaphore preCallSem = new Semaphore(0);
-        Runnable command = new Runnable() {
-            
-            @Override
-            public void run() {
-                emSupplier.preCall();
-                preCallSem.release();
-                emSupplier.postCall();
-            }
-        };
-        Executors.newSingleThreadExecutor().execute(command);
-        preCallSem.acquire();
-        // EMs not closed when close is called but are closed before timeout 
-        boolean clean = emSupplier.close();
-        Assert.assertTrue("Shutdown should be clean", clean);
-    }
-
 }

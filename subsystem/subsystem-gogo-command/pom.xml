@@ -28,7 +28,7 @@
 
   <groupId>org.apache.aries.subsystem</groupId>
   <artifactId>org.apache.aries.subsystem.gogo-command</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>1.0.1-SNAPSHOT</version>
   <name>Apache Aries Subsystem Gogo command</name>
   <packaging>bundle</packaging>
 
@@ -49,8 +49,7 @@
     <aries.osgi.private.pkg>
       org.apache.aries.subsystem.gogo.*
     </aries.osgi.private.pkg>
-    <!-- Move this item to 1.0.0 once released -->
-    <lastReleaseVersion>1.0.0-SNAPSHOT</lastReleaseVersion>
+    <lastReleaseVersion>1.0.0</lastReleaseVersion>
   </properties>
 
   <dependencies>

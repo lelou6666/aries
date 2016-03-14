@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -32,8 +33,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.aries.subsystem.ContentHandler;
+import org.apache.aries.subsystem.core.archive.AriesProvisionDependenciesDirective;
 import org.apache.aries.subsystem.core.archive.Attribute;
 import org.apache.aries.subsystem.core.archive.DeploymentManifest;
+import org.apache.aries.subsystem.core.archive.GenericHeader;
 import org.apache.aries.subsystem.core.archive.Header;
 import org.apache.aries.subsystem.core.archive.ImportPackageHeader;
 import org.apache.aries.subsystem.core.archive.RequireBundleHeader;
@@ -46,6 +49,7 @@ import org.apache.aries.subsystem.core.archive.SubsystemManifest;
 import org.apache.aries.subsystem.core.archive.SubsystemSymbolicNameHeader;
 import org.apache.aries.subsystem.core.archive.SubsystemTypeHeader;
 import org.apache.aries.subsystem.core.archive.SubsystemVersionHeader;
+import org.apache.aries.subsystem.core.capabilityset.SimpleFilter;
 import org.apache.aries.util.filesystem.FileSystem;
 import org.apache.aries.util.filesystem.IDirectory;
 import org.apache.aries.util.filesystem.IFile;
@@ -130,7 +134,7 @@ public class RawSubsystemResource implements Resource {
             resources = computeResources(content, manifest);
 			fakeImportServiceResource = createFakeResource(manifest);
 			localRepository = computeLocalRepository();
-			manifest = computeSubsystemManifestBeforeRequirements(manifest);
+			manifest = computeSubsystemManifestBeforeRequirements(content, manifest);
 			requirements = computeRequirements(manifest);
 			subsystemManifest = computeSubsystemManifestAfterRequirements(manifest);
 			capabilities = computeCapabilities();
@@ -147,9 +151,6 @@ public class RawSubsystemResource implements Resource {
 	}
 
 	public RawSubsystemResource(IDirectory idir, BasicSubsystem parent) throws IOException, URISyntaxException, ResolutionException {
-		resources = Collections.emptyList();
-		fakeImportServiceResource = null; // not needed for persistent subsystems
-		localRepository = computeLocalRepository();
 		subsystemManifest = initializeSubsystemManifest(idir);
 		requirements = subsystemManifest.toRequirements(this);
 		capabilities = subsystemManifest.toCapabilities(this);
@@ -158,6 +159,33 @@ public class RawSubsystemResource implements Resource {
 		location = new Location(deploymentManifest.getHeaders().get(DeploymentManifest.ARIESSUBSYSTEM_LOCATION).getValue());
 		parentSubsystem = parent;
 		translations = Collections.emptyList();
+<<<<<<< HEAD
+=======
+		Map<String, Header<?>> headers = deploymentManifest.getHeaders();
+		if (State.INSTALLING.equals(
+				State.valueOf(
+						headers.get(
+								DeploymentManifest.ARIESSUBSYSTEM_STATE).getValue()))
+								&& subsystemManifest.getSubsystemTypeHeader().getAriesProvisionDependenciesDirective().isResolve()) {
+			URL url = new URL(headers.get(Constants.AriesSubsystemOriginalContent).getValue());
+			Collection<Resource> resources;
+			try {
+				resources = computeResources(FileSystem.getFSRoot(new File(url.toURI())), subsystemManifest);
+			}
+			catch (IllegalArgumentException e) {
+				// Thrown by File if the URI is not hierarchical. For example,
+				// when handling a JAR URL.
+				resources = computeResources(FileSystem.getFSRoot(url.openStream()), subsystemManifest);
+			}
+			this.resources = resources;
+			fakeImportServiceResource = createFakeResource(subsystemManifest);
+		}
+		else {
+			resources = Collections.emptyList();
+			fakeImportServiceResource = null;
+		}
+		localRepository = computeLocalRepository();
+>>>>>>> refs/remotes/apache/trunk
 	}
 
 	private static Resource createFakeResource(SubsystemManifest manifest) {
@@ -198,7 +226,7 @@ public class RawSubsystemResource implements Resource {
 			capBuilder.namespace(ServiceNamespace.SERVICE_NAMESPACE);
 			capBuilder.attribute(ServiceNamespace.CAPABILITY_OBJECTCLASS_ATTRIBUTE, objectClasses);
 			if (filter != null)
-				capBuilder.attributes(new HashMap<String, Object>(ManifestHeaderProcessor.parseFilter(filter)));
+				capBuilder.attributes(new HashMap<String, Object>(SimpleFilter.attributes(filter)));
 			capBuilder.attribute("service.imported", "");
 			capBuilder.resource(fakeResource);
 			modifiableCaps.add(capBuilder.build());
@@ -301,6 +329,10 @@ public class RawSubsystemResource implements Resource {
 	private void addSubsystemSymbolicNameHeader(SubsystemManifest.Builder builder, SubsystemManifest manifest) {
 		addHeader(builder, computeSubsystemSymbolicNameHeader(manifest));
 	}
+	
+	private void addSubsystemTypeHeader(SubsystemManifest.Builder builder, SubsystemManifest manifest) {
+		addHeader(builder, computeSubsystemTypeHeader(manifest));
+	}
 
 	private void addSubsystemVersionHeader(SubsystemManifest.Builder builder, SubsystemManifest manifest) {
 		addHeader(builder, computeSubsystemVersionHeader(manifest));
@@ -328,7 +360,7 @@ public class RawSubsystemResource implements Resource {
 		for (Requirement requirement : requirements) {
 			if (!PackageNamespace.PACKAGE_NAMESPACE.equals(requirement.getNamespace()))
 				continue;
-			clauses.add(new ImportPackageHeader.Clause(requirement));
+			clauses.add(ImportPackageHeader.Clause.valueOf(requirement));
 		}
 		if (clauses.isEmpty())
 			return null;
@@ -352,7 +384,7 @@ public class RawSubsystemResource implements Resource {
 		for (Requirement requirement : requirements) {
 			if (!BundleNamespace.BUNDLE_NAMESPACE.equals(requirement.getNamespace()))
 				continue;
-			clauses.add(new RequireBundleHeader.Clause(requirement));
+			clauses.add(RequireBundleHeader.Clause.valueOf(requirement));
 		}
 		if (clauses.isEmpty())
 			return null;
@@ -366,11 +398,13 @@ public class RawSubsystemResource implements Resource {
 		ArrayList<RequireCapabilityHeader.Clause> clauses = new ArrayList<RequireCapabilityHeader.Clause>();
 		for (Requirement requirement : requirements) {
 			String namespace = requirement.getNamespace();
-			if (namespace.startsWith("osgi.") &&
-					// Don't filter out the osgi.ee namespace.
-					!namespace.equals(ExecutionEnvironmentNamespace.EXECUTION_ENVIRONMENT_NAMESPACE))
+			if (namespace.startsWith("osgi.") && !(
+					// Don't filter out the osgi.ee namespace...
+					namespace.equals(ExecutionEnvironmentNamespace.EXECUTION_ENVIRONMENT_NAMESPACE) ||
+					// ...or the osgi.service namespace.
+					namespace.equals(ServiceNamespace.SERVICE_NAMESPACE)))
 				continue;
-			clauses.add(new RequireCapabilityHeader.Clause(requirement));
+			clauses.add(RequireCapabilityHeader.Clause.valueOf(requirement));
 		}
 		if (clauses.isEmpty())
 			return null;
@@ -405,6 +439,15 @@ public class RawSubsystemResource implements Resource {
 				resources.add(capabilities.iterator().next().getResource());
 			}
 		}
+<<<<<<< HEAD
+=======
+		if (fakeImportServiceResource != null) {
+			// Add the fake resource so the dependency calculator knows not to
+			// return service requirements that are included in 
+			// Application-ImportService.
+			resources.add(fakeImportServiceResource);
+		}
+>>>>>>> refs/remotes/apache/trunk
 		// Now compute the dependencies of the content resources. These are
 		// dependencies not satisfied by the content resources themselves.
 		return new DependencyCalculator(resources).calculateDependencies();
@@ -495,7 +538,7 @@ public class RawSubsystemResource implements Resource {
 		for (Requirement requirement : requirements) {
 			if (!ServiceNamespace.SERVICE_NAMESPACE.equals(requirement.getNamespace()))
 				continue;
-			clauses.add(new SubsystemImportServiceHeader.Clause(requirement));
+			clauses.add(SubsystemImportServiceHeader.Clause.valueOf(requirement));
 		}
 		if (clauses.isEmpty())
 			return null;
@@ -514,11 +557,13 @@ public class RawSubsystemResource implements Resource {
 		return builder.build();
 	}
 
-	private SubsystemManifest computeSubsystemManifestBeforeRequirements(SubsystemManifest manifest) {
+	private SubsystemManifest computeSubsystemManifestBeforeRequirements(IDirectory content, SubsystemManifest manifest) throws MalformedURLException {
 		SubsystemManifest.Builder builder = new SubsystemManifest.Builder().manifest(manifest);
 		addSubsystemSymbolicNameHeader(builder, manifest);
 		addSubsystemVersionHeader(builder, manifest);
+		addSubsystemTypeHeader(builder, manifest);
 		addSubsystemContentHeader(builder, manifest);
+		builder.header(new GenericHeader(Constants.AriesSubsystemOriginalContent, String.valueOf(content.toURL())));
 		return builder.build();
 	}
 
@@ -530,6 +575,23 @@ public class RawSubsystemResource implements Resource {
 		if (symbolicName == null)
 			symbolicName = "org.apache.aries.subsystem." + id;
 		return new SubsystemSymbolicNameHeader(symbolicName);
+	}
+	
+	private SubsystemTypeHeader computeSubsystemTypeHeader(SubsystemManifest manifest) {
+		SubsystemTypeHeader header = manifest.getSubsystemTypeHeader();
+		AriesProvisionDependenciesDirective directive = header.getAriesProvisionDependenciesDirective();
+		if (directive != null) {
+			// Nothing to do because the directive was specified in the original 
+			// manifest. Validation of the value occurs later.
+			return header;
+		}
+		// The directive was not specified in the original manifest. The value 
+		// of the parent directive becomes the default.
+		SubsystemManifest parentManifest = ((BasicSubsystem)parentSubsystem).getSubsystemManifest();
+		SubsystemTypeHeader parentHeader = parentManifest.getSubsystemTypeHeader();
+		directive = parentHeader.getAriesProvisionDependenciesDirective();
+		header = new SubsystemTypeHeader(header.getValue() + ';' + directive);
+		return header;
 	}
 
 	private SubsystemVersionHeader computeSubsystemVersionHeader(SubsystemManifest manifest) {
@@ -595,11 +657,17 @@ public class RawSubsystemResource implements Resource {
 							+ ';'
 							+ SubsystemTypeHeader.DIRECTIVE_PROVISION_POLICY
 							+ ":="
-							+ SubsystemTypeHeader.PROVISION_POLICY_ACCEPT_DEPENDENCIES)
+							+ SubsystemTypeHeader.PROVISION_POLICY_ACCEPT_DEPENDENCIES
+							+ ';'
+							+ AriesProvisionDependenciesDirective.INSTALL.toString())
 					.build();
 	}
 
 	private boolean isComposite(SubsystemManifest manifest) {
 		return SubsystemConstants.SUBSYSTEM_TYPE_COMPOSITE.equals(manifest.getSubsystemTypeHeader().getType());
+	}
+	
+	Collection<Resource> getResources() {
+		return resources;
 	}
 }

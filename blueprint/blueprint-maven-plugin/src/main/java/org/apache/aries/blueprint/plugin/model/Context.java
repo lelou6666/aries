@@ -35,86 +35,92 @@ import org.osgi.service.blueprint.container.Converter;
 
 public class Context implements Matcher {
 
-    SortedSet<Bean> beans;
-    SortedSet<OsgiServiceRef> serviceRefs;
+    SortedSet<BeanRef> reg;
 
     public Context(Class<?>... beanClasses) {
         this(Arrays.asList(beanClasses));
     }
 
     public Context(Collection<Class<?>> beanClasses) {
-        this.beans = new TreeSet<Bean>();
-        this.serviceRefs = new TreeSet<OsgiServiceRef>();
+        this.reg = new TreeSet<BeanRef>();
+        addBlueprintRefs();
         addBeans(beanClasses);
+    }
+
+    private void addBlueprintRefs() {
+        reg.add(new BeanRef(BundleContext.class, "blueprintBundleContext"));
+        reg.add(new BeanRef(Bundle.class, "blueprintBundle"));
+        reg.add(new BeanRef(BlueprintContainer.class, "blueprintContainer"));
+        reg.add(new BeanRef(Converter.class, "blueprintConverter"));
     }
 
     private void addBeans(Collection<Class<?>> beanClasses) {
         for (Class<?> clazz : beanClasses) {
-            Bean bean = new Bean(clazz);
-            beans.add(bean);
-            addServiceRefs(clazz);
-            addProducedBeans(clazz, bean.id);
+            addBean(clazz);
         }
     }
 
-    private void addProducedBeans(Class<?> clazz, String factoryBeanId) {
+    private void addBean(Class<?> clazz) {
+        Bean bean = new Bean(clazz);
+        reg.add(bean);
+        addServiceRefs(clazz);
+        addProducedBeans(clazz, bean);
+    }
+
+    private void addProducedBeans(Class<?> clazz, BeanRef factoryBean) {
         for (Method method : clazz.getMethods()) {
             Produces produces = method.getAnnotation(Produces.class);
             if (produces != null) {
                 Class<?> producedClass = method.getReturnType();
-                ProducedBean producedBean = new ProducedBean(producedClass, factoryBeanId, method.getName());
-                beans.add(producedBean);
+                ProducedBean producedBean = new ProducedBean(producedClass, factoryBean, method.getName());
+                reg.add(producedBean);
             }
         }
     }
 
     private void addServiceRefs(Class<?> clazz) {
-        for (Field field : clazz.getDeclaredFields()) {
-            OsgiService osgiService = field.getAnnotation(OsgiService.class);
-            if (osgiService != null) {
-                serviceRefs.add(new OsgiServiceRef(field));
-            }
+        for (Field field : new Introspector(clazz).fieldsWith(OsgiService.class)) {
+            reg.add(new OsgiServiceRef(field));
         }
     }
 
     public void resolve() {
-        for (Bean bean : beans) {
+        for (Bean bean : getBeans()) {
             bean.resolve(this);
+            addServiceRefs(bean);
         }
     }
-    
+
+    private void addServiceRefs(Bean bean) {
+        reg.addAll(bean.serviceRefs);
+    }
+
     public BeanRef getMatching(BeanRef template) {
-        for (Bean bean : beans) {
+        for (BeanRef bean : reg) {
             if (bean.matches(template)) {
                 return bean;
             }
         }
-        for (BeanRef bean : serviceRefs) {
-            if (bean.matches(template)) {
-                return bean;
-            }
-        }
-        if (template.clazz == BundleContext.class) {
-            return new BeanRef(BundleContext.class, "blueprintBundleContext");
-        }
-        if (template.clazz == Bundle.class) {
-            return new BeanRef(Bundle.class, "blueprintBundle");
-        }
-        if (template.clazz == BlueprintContainer.class) {
-            return new BeanRef(BlueprintContainer.class, "blueprintContainer");
-        }
-        if (template.clazz == Converter.class) {
-            return new BeanRef(Converter.class, "blueprintConverter");
-        }
-        
         return null;
     }
 
     public SortedSet<Bean> getBeans() {
+        TreeSet<Bean> beans = new TreeSet<Bean>();
+        for (BeanRef ref : reg) {
+            if (ref instanceof Bean) {
+                beans.add((Bean)ref);
+            }
+        }
         return beans;
     }
 
     public SortedSet<OsgiServiceRef> getServiceRefs() {
+        TreeSet<OsgiServiceRef> serviceRefs = new TreeSet<OsgiServiceRef>();
+        for (BeanRef ref : reg) {
+            if (ref instanceof OsgiServiceRef) {
+                serviceRefs.add((OsgiServiceRef)ref);
+            }
+        }
         return serviceRefs;
     }
 

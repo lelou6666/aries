@@ -18,10 +18,13 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.aries.subsystem.core.archive.SubsystemImportServiceHeader;
 import org.apache.aries.subsystem.itests.util.GenericMetadataWrapper;
 import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.apache.aries.util.manifest.ManifestHeaderProcessor.GenericMetadata;
@@ -64,8 +67,7 @@ public class ServiceDependencyTest extends SubsystemTest {
 	 * Bundle-Blueprint: OSGI-INF/blueprint/*.xml
 	 * 
 	 * <blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0">
-	 * 		<reference interface="bundle.b"/>
-	 * 		<reference interface="bundle.b1" filter="(active=true)"/>
+	 * 		<reference interface="bundle.b" filter="(&(active=true)(mode=shared))"/>
 	 * 		<service interface="bundle.a" ref="bundle.a"/>
 	 * </blueprint>
 	 */
@@ -152,7 +154,8 @@ public class ServiceDependencyTest extends SubsystemTest {
 					.append("<blueprint ")
 					.append("xmlns=\"http://www.osgi.org/xmlns/blueprint/v1.0.0\">")
 					.append("<reference ")
-					.append("interface=\"bundle.b\"")
+					.append("interface=\"bundle.b\" ")
+					.append("filter=\"(active=true)(mode=shared)\"")
 					.append("/>")
 					.append("<service ")
 					.append("interface=\"bundle.a\" ")
@@ -263,7 +266,7 @@ public class ServiceDependencyTest extends SubsystemTest {
 			try {
 				Subsystem child = installSubsystemFromFile(parent, APPLICATION_A);
 				try {
-					assertSubsystemImportServiceHeader(child, "osgi.service;filter:=\"(objectClass=bundle.b)\";resolution:=mandatory;cardinality:=single");
+					assertSubsystemImportServiceHeader(child, "bundle.b;filter:=\"(&(active=true)(mode=shared))\";resolution:=mandatory;cardinality:=single;effective:=active");
 				}
 				finally {
 					uninstallSubsystemSilently(child);
@@ -300,7 +303,7 @@ public class ServiceDependencyTest extends SubsystemTest {
 		try {
 			Subsystem subsystem = installSubsystemFromFile(APPLICATION_B);
 			try {
-				assertSubsystemImportServiceHeader(subsystem, "osgi.service;filter:=\"(objectClass=bundle.a)\";resolution:=optional;cardinality:=single");
+				assertSubsystemImportServiceHeader(subsystem, "bundle.a;resolution:=optional;cardinality:=single;effective:=active");
 			}
 			finally {
 				uninstallSubsystemSilently(subsystem);
@@ -323,10 +326,15 @@ public class ServiceDependencyTest extends SubsystemTest {
 	
 	private void assertSubsystemImportServiceHeader(Subsystem subsystem, String value) throws InvalidSyntaxException {
 		String header = assertHeaderExists(subsystem, SubsystemConstants.SUBSYSTEM_IMPORTSERVICE);
-		List<GenericMetadata> actual = ManifestHeaderProcessor.parseRequirementString(header);
-		List<GenericMetadata> expected = ManifestHeaderProcessor.parseRequirementString(value);
-		Assert.assertEquals("Wrong number of clauses", expected.size(), actual.size());
-		for (int i = 0; i < expected.size(); i++)
-			assertEquals("Wrong clause", new GenericMetadataWrapper(expected.get(i)), new GenericMetadataWrapper(actual.get(i)));
+		SubsystemImportServiceHeader actual = new SubsystemImportServiceHeader(header);
+		SubsystemImportServiceHeader expected = new SubsystemImportServiceHeader(value);
+		Collection<SubsystemImportServiceHeader.Clause> actualClauses = actual.getClauses();
+		Collection<SubsystemImportServiceHeader.Clause> expectedClauses = expected.getClauses();
+		Assert.assertEquals("Wrong number of clauses", expectedClauses.size(), actualClauses.size());
+		Iterator<SubsystemImportServiceHeader.Clause> actualItr = actualClauses.iterator();
+		Iterator<SubsystemImportServiceHeader.Clause>  expectedItr = expectedClauses.iterator();
+		while (expectedItr.hasNext()) {
+			assertEquals("Wrong clause", expectedItr.next(), actualItr.next());
+		}
 	}
 }

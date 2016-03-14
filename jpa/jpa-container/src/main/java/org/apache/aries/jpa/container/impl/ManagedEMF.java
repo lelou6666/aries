@@ -40,7 +40,6 @@ import org.osgi.framework.Constants;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.cm.ConfigurationException;
 import org.osgi.service.cm.ManagedService;
-import org.osgi.service.jpa.EntityManagerFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,60 +49,83 @@ import org.slf4j.LoggerFactory;
  * the JPA_CONFIGURATION_PREFIX.<persistence unit name>.
  */
 public class ManagedEMF implements Closeable, ManagedService {
-	private static final Logger LOGGER = LoggerFactory.getLogger(ManagedEMF.class);
-
-    private static String JPA_CONFIGURATION_PREFIX = "org.apache.aries.jpa.";
+    private static final Logger LOGGER = LoggerFactory.getLogger(ManagedEMF.class);
+    private static final String JPA_CONFIGURATION_PREFIX = "org.apache.aries.jpa.";
 
     private EntityManagerFactory emf;
     private ServiceRegistration<EntityManagerFactory> reg;
-    private ServiceRegistration<EntityManagerFactoryBuilder> regBuilder;
     private PersistenceProvider provider;
     private PersistenceUnitInfo persistenceUnit;
     private Bundle bundle;
+    private ServiceRegistration<?> configReg;
+
+    private boolean closed;
 
     public ManagedEMF(BundleContext containerContext, Bundle bundle, PersistenceProvider provider, PersistenceUnitInfo persistenceUnit) {
         this.provider = provider;
         this.persistenceUnit = persistenceUnit;
         this.bundle = bundle;
-
-        Dictionary<String, Object> configuration = new Hashtable<String, Object>();
-        configuration.put(Constants.SERVICE_PID,
-                          JPA_CONFIGURATION_PREFIX + persistenceUnit.getPersistenceUnitName());
-        containerContext.registerService(ManagedService.class.getName(), this, configuration);
+        registerManagedService(containerContext, persistenceUnit);
+        closed = false;
     }
 
-    public void close() {
-        try {
-            reg.unregister();
-        } catch (Exception e) {
-            // Ignore. May happen if persistence unit bundle is unloaded/updated
+    private void registerManagedService(BundleContext containerContext, PersistenceUnitInfo persistenceUnit) {
+        Dictionary<String, Object> configuration = new Hashtable<String, Object>(); // NOSONAR
+        configuration.put(Constants.SERVICE_PID,
+                          JPA_CONFIGURATION_PREFIX + persistenceUnit.getPersistenceUnitName());
+        configReg = containerContext.registerService(ManagedService.class.getName(), this, configuration);
+    }
+
+    public void closeEMF() {
+        if (reg != null) {
+            try {
+                reg.unregister();
+            } catch (Exception e) {
+                LOGGER.debug("Exception on unregister", e);
+            }
         }
-        try {
-            regBuilder.unregister();
-        } catch (Exception e) {
-            // Ignore. May happen if persistence unit bundle is unloaded/updated
-        }
-        if (emf != null) {
+        if (emf != null && emf.isOpen()) {
             try {
                 emf.close();
             } catch (Exception e) {
-                LOGGER.warn("EntityManagerFactory for " + persistenceUnit.getPersistenceUnitName() + " already close", e);
+                LOGGER.warn("Error closing EntityManagerFactory for " + persistenceUnit.getPersistenceUnitName(), e);
             }
         }
         reg = null;
         emf = null;
     }
+    
+    @Override
+    public void close() {
+        closed = true;
+        closeEMF();
+        if (configReg != null) {
+            configReg.unregister();
+        }
+    }
 
     @Override
     public void updated(Dictionary<String, ?> properties) throws ConfigurationException {
+        if (closed) {
+            return;
+        }
         if (emf != null) {
-            close();
+            closeEMF();
+        }
+        if (bundle.getState() == Bundle.UNINSTALLED || bundle.getState() == Bundle.INSTALLED || bundle.getState() == Bundle.STOPPING) {
+            // Not sure why but during the TCK tests updated sometimes was called
+            // for uninstalled bundles
+            return;
         }
         Map<String, Object> overrides = (properties != null) ? asMap(properties) : null;
         LOGGER.info("Registering EntityManagerFactory for persistence unit " + persistenceUnit.getPersistenceUnitName());
         if (LOGGER.isDebugEnabled()) {
            LOGGER.debug("Using properties override " + overrides); 
         }
+        createAndPublishEMF(overrides);
+    }
+
+    private void createAndPublishEMF(Map<String, Object> overrides) {
         emf = provider.createContainerEntityManagerFactory(persistenceUnit, overrides);
         Dictionary<String, String> props = createProperties(persistenceUnit, bundle);
         BundleContext uctx = bundle.getBundleContext();
@@ -111,7 +133,7 @@ public class ManagedEMF implements Closeable, ManagedService {
     }
 
     public static Dictionary<String, String> createProperties(PersistenceUnitInfo persistenceUnit, Bundle puBundle) {
-        Dictionary<String, String> props = new Hashtable<>();
+        Dictionary<String, String> props = new Hashtable<String, String>(); // NOSONAR
         props.put(JPA_UNIT_NAME, persistenceUnit.getPersistenceUnitName());
         if (persistenceUnit.getPersistenceProviderClassName() != null) {
             props.put(JPA_UNIT_PROVIDER, persistenceUnit.getPersistenceProviderClassName());
@@ -121,7 +143,7 @@ public class ManagedEMF implements Closeable, ManagedService {
     }
 
     private Map<String, Object> asMap(Dictionary<String, ?> dict) {
-        Map<String, Object> map = new HashMap<String, Object>();
+        Map<String, Object> map = new HashMap<String, Object>(); // NOSONAR
         map.put(PersistenceUnitTransactionType.class.getName(), persistenceUnit.getTransactionType());
         for (Enumeration<String> e = dict.keys(); e.hasMoreElements();) {
             String key = e.nextElement();

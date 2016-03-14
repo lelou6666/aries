@@ -18,216 +18,110 @@
  */
 package org.apache.aries.transaction.parsing;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.URL;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+
+import javax.transaction.TransactionManager;
 
 import org.apache.aries.blueprint.ComponentDefinitionRegistry;
-import org.apache.aries.blueprint.Interceptor;
 import org.apache.aries.blueprint.NamespaceHandler;
 import org.apache.aries.blueprint.ParserContext;
-import org.apache.aries.blueprint.PassThroughMetadata;
+import org.apache.aries.blueprint.mutable.MutableBeanMetadata;
 import org.apache.aries.blueprint.mutable.MutablePassThroughMetadata;
-import org.apache.aries.transaction.BundleWideTxData;
-import org.apache.aries.transaction.Constants;
-import org.apache.aries.transaction.TxComponentMetaDataHelper;
-import org.apache.aries.transaction.annotations.TransactionPropagationType;
-import org.osgi.framework.Bundle;
-import org.osgi.service.blueprint.container.BlueprintContainer;
 import org.osgi.service.blueprint.reflect.ComponentMetadata;
 import org.osgi.service.blueprint.reflect.Metadata;
+import org.osgi.service.coordinator.Coordinator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 public class TxNamespaceHandler implements NamespaceHandler {
+    public static final String TX_NAMESPACE_URI = "http://aries.apache.org/xmlns/transactions/v2.0.0";
     public static final String ANNOTATION_PARSER_BEAN_NAME = ".org_apache_aries_transaction_annotations";
-    private static final String BEAN = "bean";
-    private static final String VALUE = "value";
-    private static final String METHOD = "method";
-    public static final String DEFAULT_INTERCEPTOR_ID = "txinterceptor";
-    private static final String INTERCEPTOR_BLUEPRINT_ID = "interceptor.blueprint.id";
-
     private static final Logger LOGGER = LoggerFactory.getLogger(TxNamespaceHandler.class);
+    private TransactionManager tm;
+    private Coordinator coordinator;
 
-    private TxComponentMetaDataHelper metaDataHelper;
-    private Interceptor interceptor = null;
-
-    private final ConcurrentMap<ComponentDefinitionRegistry,Bundle> registered = new ConcurrentHashMap<ComponentDefinitionRegistry, Bundle>();
     private final Map<String, String> schemaMap;
     
     public TxNamespaceHandler() {
         schemaMap = new HashMap<String, String>();
-        schemaMap.put("http://aries.apache.org/xmlns/transactions/v1.0.0", "transactionv10.xsd");
-        schemaMap.put("http://aries.apache.org/xmlns/transactions/v1.1.0", "transactionv11.xsd");
-        schemaMap.put("http://aries.apache.org/xmlns/transactions/v1.2.0", "transactionv12.xsd");
+        schemaMap.put(TX_NAMESPACE_URI, "transactionv20.xsd");
     }
 
-    private void parseElement(Element elt, ComponentMetadata cm, ParserContext pc)
+    private void parseElement(Element elt, ParserContext pc)
     {
-        if (LOGGER.isDebugEnabled())
-            LOGGER.debug("parser asked to parse .. " + elt);
+        LOGGER.debug("parser asked to parse element {} ", elt.getNodeName());
 
         ComponentDefinitionRegistry cdr = pc.getComponentDefinitionRegistry();
-        if ("transaction".equals(elt.getLocalName())) {
-            if (LOGGER.isDebugEnabled())
-                LOGGER.debug("parser adding interceptor for " + elt);
-
-            ComponentMetadata meta = cdr.getComponentDefinition("blueprintBundle");
-            Bundle blueprintBundle = null;
-            if (meta instanceof PassThroughMetadata) {
-                blueprintBundle = (Bundle) ((PassThroughMetadata) meta).getObject();
-            }
-
-            // don't register components if we have no bundle (= dry parse)
-            if (blueprintBundle != null) {
-              registered.put(cdr, blueprintBundle);
-              TransactionPropagationType value = getType(elt.getAttribute(VALUE));
-              String method = elt.getAttribute(METHOD);
-              if (cm == null) {
-                  // if the enclosing component is null, then we assume this is the top element                 
-                  
-                  String bean = elt.getAttribute(BEAN);
-                  registerComponentsWithInterceptor(cdr, bean);
-  
-                  metaDataHelper.populateBundleWideTransactionData(pc.getComponentDefinitionRegistry(), 
-                          value, method, bean);
-              } else {
-                  cdr.registerInterceptorWithComponent(cm, interceptor);
-                  if (LOGGER.isDebugEnabled())
-                      LOGGER.debug("parser setting comp trans data for " + value + "  " + method);
-      
-                  metaDataHelper.setComponentTransactionData(cdr, cm, value, method);
-              }
-            }
-        } else if ("enable-annotations".equals(elt.getLocalName())) {
+        if ("enable".equals(elt.getLocalName())) {
             Node n = elt.getChildNodes().item(0);
-            if(n == null || Boolean.parseBoolean(n.getNodeValue())) {
-                //We need to register a bean processor to add annotation-based config
-                if(!!!cdr.containsComponentDefinition(ANNOTATION_PARSER_BEAN_NAME)) {
-                	
-                	MutablePassThroughMetadata mptmd = pc.createMetadata(MutablePassThroughMetadata.class);
-                	mptmd.setId(ANNOTATION_PARSER_BEAN_NAME);
-                	mptmd.setObject(new AnnotationParser(cdr, interceptor, metaDataHelper));
-                    cdr.registerComponentDefinition(mptmd);
-                }
+            if ((n == null || Boolean.parseBoolean(n.getNodeValue())) &&
+                !cdr.containsComponentDefinition(ANNOTATION_PARSER_BEAN_NAME)) {
+                LOGGER.debug("Enabling annotation based transactions");
+                MutableBeanMetadata meta = createAnnotationParserBean(pc, cdr);
+                cdr.registerComponentDefinition(meta);
             }
         }
-        
-        if (LOGGER.isDebugEnabled())
-            LOGGER.debug("parser done with " + elt);
     }
 
-    private TransactionPropagationType getType(String typeSt) {
-        return typeSt == null || typeSt.length() == 0 ? null : TransactionPropagationType.valueOf(typeSt);
+    private MutableBeanMetadata createAnnotationParserBean(ParserContext pc, ComponentDefinitionRegistry cdr) {
+        MutableBeanMetadata meta = pc.createMetadata(MutableBeanMetadata.class);
+        meta.setId(ANNOTATION_PARSER_BEAN_NAME);
+        meta.setRuntimeClass(AnnotationProcessor.class);
+        meta.setProcessor(true);
+        meta.addArgument(passThrough(pc, cdr), ComponentDefinitionRegistry.class.getName(), 0);
+        meta.addArgument(passThrough(pc, tm), TransactionManager.class.getName(), 1);
+        meta.addArgument(passThrough(pc, coordinator), Coordinator.class.getName(), 1);
+        return meta;
     }
 
+    private MutablePassThroughMetadata passThrough(ParserContext pc, Object o) {
+        MutablePassThroughMetadata meta = pc.createMetadata(MutablePassThroughMetadata.class);
+        meta.setObject(o);
+        return meta;
+    }
+
+    @Override
     public ComponentMetadata decorate(Node node, ComponentMetadata cm, ParserContext pc)
     {
         if (node instanceof Element) {
-            Element elt = (Element) node;
-            parseElement(elt, cm, pc);
+            parseElement((Element) node, pc);
         }
         return cm;
     }
 
+    @Override
     public Metadata parse(Element elt, ParserContext pc)
     {
-        parseElement(elt, pc.getEnclosingComponent(), pc);
+        parseElement(elt, pc);
         return null;
     }
 
+    @Override
     public URL getSchemaLocation(String namespaceUri)
     {
         String xsdPath = schemaMap.get(namespaceUri);
         return xsdPath != null ? this.getClass().getResource(xsdPath) : null;
     }
-
-    public final void setTxMetaDataHelper(TxComponentMetaDataHelper transactionEnhancer)
-    {
-        this.metaDataHelper = transactionEnhancer;
-    }
-
-    public final void setBlueprintContainer(BlueprintContainer container) 
-    {
-        String id = DEFAULT_INTERCEPTOR_ID;
-        InputStream is = TxNamespaceHandler.class.getResourceAsStream("/provider.properties");
-        
-        if (is != null) {
-            try {
-                Properties props = new Properties();
-                props.load(is);
-                if (props.containsKey(INTERCEPTOR_BLUEPRINT_ID)) {
-                    id = props.getProperty(INTERCEPTOR_BLUEPRINT_ID);
-                }
-            } catch (IOException e) {
-                LOGGER.error(Constants.MESSAGES.getMessage("unable.to.load.provider.props"), e);
-            } finally {
-                try {
-                    is.close();
-                } catch (IOException e2) {
-                    LOGGER.error(Constants.MESSAGES.getMessage("exception.closing.stream"), e2);
-                }
-            }
-        }
-        
-        this.interceptor = (Interceptor) container.getComponentInstance(id);
+    
+    public void setTm(TransactionManager tm) {
+        this.tm = tm;
     }
     
+    public void setCoordinator(Coordinator coordinator) {
+        this.coordinator = coordinator;
+    }
+
+    @SuppressWarnings("rawtypes")
+    @Override
     public Set<Class> getManagedClasses()
     {
-        // TODO Auto-generated method stub
-        return null;
+        return Collections.emptySet();
     }
     
-    public boolean isRegistered(ComponentDefinitionRegistry cdr) {
-        return registered.containsKey(cdr);
-    }
-    
-    public void unregister(Bundle blueprintBundle) {
-        Iterator<Map.Entry<ComponentDefinitionRegistry, Bundle>> it = registered.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<ComponentDefinitionRegistry, Bundle> e = it.next();
-            if (blueprintBundle.equals(e.getValue())) {
-                metaDataHelper.unregister(e.getKey());
-                it.remove();
-            }
-        }
-    }
-    
-    private void registerComponentsWithInterceptor(ComponentDefinitionRegistry cdr, String bean) {        
-        Set<String> ids = cdr.getComponentDefinitionNames();
-
-        if (bean == null || bean.length() == 0) {
-            // in this case, let's attempt to register all components
-            // if the component has already been registered with this interceptor,
-            // the registration will be ignored.
-            for (String id : ids) {
-                ComponentMetadata componentMetadata = cdr.getComponentDefinition(id);
-                cdr.registerInterceptorWithComponent(componentMetadata, interceptor);
-            }
-        } else {
-            //create a dummy bundle wide tx data, so we can get the bean patterns from it
-            BundleWideTxData data = new BundleWideTxData(null, "*", bean);
-            for (Pattern p : data.getBean()) {
-              for (String id : ids) {
-                  Matcher m = p.matcher(id);
-                  if (m.matches()) {
-                      ComponentMetadata componentMetadata = cdr.getComponentDefinition(id);
-                      cdr.registerInterceptorWithComponent(componentMetadata, interceptor);
-                  }
-              }
-            }
-        }
-    }
 }
