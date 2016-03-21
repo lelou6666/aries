@@ -24,10 +24,15 @@ import static org.osgi.jmx.framework.BundleStateMBean.STOPPING;
 import static org.osgi.jmx.framework.BundleStateMBean.UNINSTALLED;
 import static org.osgi.jmx.framework.BundleStateMBean.UNKNOWN;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Dictionary;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import org.apache.aries.util.ManifestHeaderUtils;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
@@ -58,13 +63,13 @@ public class FrameworkUtils {
      * @throws IllegalArgumentException
      *             if no Bundle is found with matching bundleId
      */
-    public static Bundle resolveBundle(BundleContext bundleContext, long bundleId) throws IllegalArgumentException {
+    public static Bundle resolveBundle(BundleContext bundleContext, long bundleId) throws IOException {
         if (bundleContext == null) {
             throw new IllegalArgumentException("Argument bundleContext cannot be null");
         }
         Bundle bundle = bundleContext.getBundle(bundleId);
         if (bundle == null) {
-            throw new IllegalArgumentException("Bundle with id [" + bundleId + "] Not Found");
+            throw new IOException("Bundle with id [" + bundleId + "] not found");
         }
         return bundle;
     }
@@ -77,9 +82,27 @@ public class FrameworkUtils {
      * @return bundleIds in sequence
      */
     public static long[] getBundleIds(Bundle[] bundles) {
-        long[] result = (bundles == null) ? new long[0] : new long[bundles.length];
-        for (int i = 0; i < result.length; i++) {
-            result[i] = bundles[i].getBundleId();
+        long[] result;
+        if (bundles == null) {
+            result = new long[0];
+        } else {
+            result = new long[bundles.length];
+            for (int i = 0; i < bundles.length; i++) {
+                result[i] = bundles[i].getBundleId();
+            }
+        }
+        return result;
+    }
+    
+    public static long[] getBundleIds(List<Bundle> bundles) { 
+        long[] result;
+        if (bundles == null) {
+            result = new long[0];
+        } else {
+            result = new long[bundles.size()];
+            for (int i = 0; i < bundles.size(); i++) {
+                result[i] = bundles.get(i).getBundleId();
+            }
         }
         return result;
     }
@@ -91,10 +114,10 @@ public class FrameworkUtils {
      * @param bundleContext
      * @param serviceId
      * @return ServiceReference with matching service.id property
-     * @throws IllegalArgumentException
-     *             if bundleContext is null or no service is found with the given id
+     * @throws IllegalArgumentException if bundleContext is null
+     * @throws IOException if no service is found with the given id
      */
-    public static ServiceReference resolveService(BundleContext bundleContext, long serviceId) {
+    public static ServiceReference resolveService(BundleContext bundleContext, long serviceId) throws IOException {
         if (bundleContext == null) {
             throw new IllegalArgumentException("Argument bundleContext cannot be null");
         }
@@ -103,12 +126,14 @@ public class FrameworkUtils {
             ServiceReference[] references = bundleContext.getAllServiceReferences(null, "(" + Constants.SERVICE_ID
                     + "=" + serviceId + ")");
             if (references == null || references.length < 1) {
-                throw new IllegalArgumentException("Service with id [" + serviceId + "] Not Found");
+                throw new IOException("Service with id [" + serviceId + "] not found");
             } else {
                 result = references[0];
             }
         } catch (InvalidSyntaxException e) {
-            throw new IllegalStateException("Failure when resolving service ", e);
+            IOException ioex = new IOException("Failure when resolving service ");
+            ioex.initCause(e);
+            throw ioex;
         }
         return result;
     }
@@ -223,7 +248,6 @@ public class FrameworkUtils {
      * @throws IllegalArgumentException
      *             if fragment or packageAdmin are null
      */
-    @SuppressWarnings("unchecked")
     public static String[] getBundleImportedPackages(BundleContext localBundleContext, Bundle bundle,
             PackageAdmin packageAdmin) throws IllegalArgumentException {
         if (bundle == null) {
@@ -232,48 +256,61 @@ public class FrameworkUtils {
         if (packageAdmin == null) {
             throw new IllegalArgumentException("Argument packageAdmin cannot be null");
         }
+        
         List<String> result = new ArrayList<String>();
-        Dictionary<String, String> bundleHeaders = bundle.getHeaders();
-        String dynamicImportHeader = bundleHeaders.get(Constants.DYNAMICIMPORT_PACKAGE);
-        // if DynamicImport-Package used, then do full iteration
-        if (dynamicImportHeader != null && dynamicImportHeader.contains("*")) {
-            Bundle[] bundles = localBundleContext.getBundles();
-            for (Bundle candidate : bundles) {
-                if (candidate.equals(bundle)) {
-                    continue;
-                }
-                ExportedPackage[] candidateExports = packageAdmin.getExportedPackages(candidate);
-                if (candidateExports != null) {
-                    for (ExportedPackage exportedPackage : candidateExports) {
-                        Bundle[] userBundles = exportedPackage.getImportingBundles();
-                        if (userBundles != null && arrayContains(userBundles, bundle)) {
-                            result.add(exportedPackage.getName() + ";" + exportedPackage.getVersion().toString());
-                        }
-                    }// end for candidateExports
-                }
-            }// end for bundles
-        } else { // only query ExportPackage for package names declared as imported
-            List<String> importPackages = new ArrayList<String>();
-            String importPackageHeader = bundleHeaders.get(Constants.IMPORT_PACKAGE);
-            if (importPackageHeader != null && importPackageHeader.length() > 0) {
-                importPackages.addAll(extractHeaderDeclaration(importPackageHeader));
-            }
-            if (dynamicImportHeader != null) {
-                importPackages.addAll(extractHeaderDeclaration(dynamicImportHeader));
-            }
-            for (String packageName : importPackages) {
-                ExportedPackage[] candidateExports = packageAdmin.getExportedPackages(packageName);
-                if (candidateExports != null) {
-                    for (ExportedPackage exportedPackage : candidateExports) {
-                        Bundle[] userBundles = exportedPackage.getImportingBundles();
-                        if (userBundles != null && arrayContains(userBundles, bundle)) {
-                            result.add(exportedPackage.getName() + ";" + exportedPackage.getVersion().toString());
-                        }
-                    }// end for candidateExports
-                }
-            }
+        for (ExportedPackage ep : getBundleImportedPackagesRaw(localBundleContext, bundle, packageAdmin)) {
+          result.add(ep.getName()+";"+ep.getVersion());
         }
-        return result.toArray(new String[result.size()]);
+        
+        return result.toArray(new String[0]);
+    }
+    
+    @SuppressWarnings("unchecked")
+    private static Collection<ExportedPackage> getBundleImportedPackagesRaw(BundleContext localBundleContext, Bundle bundle, PackageAdmin packageAdmin) throws IllegalArgumentException 
+    {
+      List<ExportedPackage> result = new ArrayList<ExportedPackage>();
+      Dictionary<String, String> bundleHeaders = bundle.getHeaders();
+      String dynamicImportHeader = bundleHeaders.get(Constants.DYNAMICIMPORT_PACKAGE);
+      // if DynamicImport-Package used, then do full iteration
+      // else means no dynamic import or has dynamic import but no wildcard "*" in it.
+      if (dynamicImportHeader != null && dynamicImportHeader.contains("*")) {
+          Bundle[] bundles = localBundleContext.getBundles();
+          for (Bundle candidate : bundles) {
+              if (candidate.equals(bundle)) {
+                  continue;
+              }
+              ExportedPackage[] candidateExports = packageAdmin.getExportedPackages(candidate);
+              if (candidateExports != null) {
+                  for (ExportedPackage exportedPackage : candidateExports) {
+                      Bundle[] userBundles = exportedPackage.getImportingBundles();
+                      if (userBundles != null && arrayContains(userBundles, bundle)) {
+                          result.add(exportedPackage);
+                      }
+                  }// end for candidateExports
+              }
+          }// end for bundles
+      } else { // only query ExportPackage for package names declared as imported
+          List<String> importPackages = new ArrayList<String>();
+          String importPackageHeader = bundleHeaders.get(Constants.IMPORT_PACKAGE);
+          if (importPackageHeader != null && importPackageHeader.length() > 0) {
+            importPackages.addAll(extractHeaderDeclaration(importPackageHeader));
+          }
+          if (dynamicImportHeader != null) {
+            importPackages.addAll(extractHeaderDeclaration(dynamicImportHeader));
+          }
+          for (String packageName : importPackages) {
+              ExportedPackage[] candidateExports = packageAdmin.getExportedPackages(packageName);
+              if (candidateExports != null) {
+                  for (ExportedPackage exportedPackage : candidateExports) {
+                      Bundle[] userBundles = exportedPackage.getImportingBundles();
+                      if (userBundles != null && arrayContains(userBundles, bundle)) {
+                          result.add(exportedPackage);
+                      }
+                  }// end for candidateExports
+              }
+          }
+      }
+      return result;
     }
 
     /**
@@ -347,15 +384,26 @@ public class FrameworkUtils {
             throw new IllegalArgumentException("Argument packageAdmin cannot be null");
         }
         boolean result = false;
-        RequiredBundle[] requiredBundles = packageAdmin.getRequiredBundles(bundle.getSymbolicName());
-        if (requiredBundles != null) {
-            for (RequiredBundle requiredBundle : requiredBundles) {
-                Bundle required = requiredBundle.getBundle();
-                if (required != null && required.equals(bundle)) {
-                    result = requiredBundle.isRemovalPending();
+        ExportedPackage[] exportedPackages = packageAdmin.getExportedPackages(bundle);
+        if (exportedPackages != null) {
+            for (ExportedPackage exportedPackage : exportedPackages) {
+                if (exportedPackage.isRemovalPending()) {
+                    result = true;
                     break;
                 }
-            }// end for requiredBundles
+            }
+        }
+        if (!result) {
+            RequiredBundle[] requiredBundles = packageAdmin.getRequiredBundles(bundle.getSymbolicName());
+            if (requiredBundles != null) {
+                for (RequiredBundle requiredBundle : requiredBundles) {
+                    Bundle required = requiredBundle.getBundle();
+                    if (required == bundle) {
+                        result = requiredBundle.isRemovalPending();
+                        break;
+                    }
+                }
+            }
         }
         return result;
     }
@@ -378,18 +426,39 @@ public class FrameworkUtils {
             throw new IllegalArgumentException("Argument packageAdmin cannot be null");
         }
         boolean result = false;
-        RequiredBundle[] requiredBundles = packageAdmin.getRequiredBundles(bundle.getSymbolicName());
-        if (requiredBundles != null) {
-            for (RequiredBundle requiredBundle : requiredBundles) {
-                Bundle required = requiredBundle.getBundle();
-                if (required != null && required.equals(bundle)) {
-                    Bundle[] requiring = requiredBundle.getRequiringBundles();
-                    if (requiring != null && requiring.length > 0) {
-                        result = true;
-                        break;
+        // Check imported packages (statically or dynamically)
+        ExportedPackage[] exportedPackages = packageAdmin.getExportedPackages(bundle);
+        if (exportedPackages != null) {
+            for (ExportedPackage exportedPackage : exportedPackages) {
+                Bundle[] importingBundles = exportedPackage.getImportingBundles();
+                if (importingBundles != null && importingBundles.length > 0) {
+                    result = true;
+                    break;
+                }
+            }
+        }
+        if (!result) {
+            // Check required bundles
+            RequiredBundle[] requiredBundles = packageAdmin.getRequiredBundles(bundle.getSymbolicName());
+            if (requiredBundles != null) {
+                for (RequiredBundle requiredBundle : requiredBundles) {
+                    Bundle required = requiredBundle.getBundle();
+                    if (required == bundle) {
+                        Bundle[] requiring = requiredBundle.getRequiringBundles();
+                        if (requiring != null && requiring.length > 0) {
+                            result = true;
+                            break;
+                        }
                     }
                 }
-            }// end for requiredBundles
+            }
+        }
+        if (!result) {
+            // Check fragment bundles
+            Bundle[] fragments = packageAdmin.getFragments(bundle);
+            if (fragments != null && fragments.length > 0) {
+                result = true;
+            }
         }
         return result;
     }
@@ -408,24 +477,29 @@ public class FrameworkUtils {
      *             if bundle or packageAdmin are null
      */
     @SuppressWarnings("unchecked")
-    public static long[] getBundleDependencies(BundleContext localBundleContext, Bundle bundle,
-            PackageAdmin packageAdmin) throws IllegalArgumentException {
+    public static long[] getBundleDependencies(BundleContext localBundleContext, 
+                                               Bundle bundle,
+                                               PackageAdmin packageAdmin) throws IllegalArgumentException {
         if (bundle == null) {
             throw new IllegalArgumentException("Argument bundle cannot be null");
         }
         if (packageAdmin == null) {
             throw new IllegalArgumentException("Argument packageAdmin cannot be null");
         }
-        List<Bundle> dependencies = new ArrayList<Bundle>();
+        Set<Bundle> dependencies = new HashSet<Bundle>();
+        
+        for (ExportedPackage ep : getBundleImportedPackagesRaw(localBundleContext, bundle, packageAdmin)) {
+          dependencies.add(ep.getExportingBundle());
+        }
+        
+        // Handle required bundles
         Dictionary<String, String> bundleHeaders = bundle.getHeaders();
         String requireBundleHeader = bundleHeaders.get(Constants.REQUIRE_BUNDLE);
         if (requireBundleHeader != null) { // only check if Require-Bundle is used
-            List<String> bundleSymbolicNames = extractHeaderDeclaration(requireBundleHeader);
+        	List<String> bundleSymbolicNames = extractHeaderDeclaration(requireBundleHeader);
             for (String bundleSymbolicName: bundleSymbolicNames) {
                 RequiredBundle[] candidateRequiredBundles = packageAdmin.getRequiredBundles(bundleSymbolicName);
-                if (candidateRequiredBundles == null) {
-                    continue;
-                } else {
+                if (candidateRequiredBundles != null) {
                     for (RequiredBundle candidateRequiredBundle : candidateRequiredBundles) {
                         Bundle[] bundlesRequiring = candidateRequiredBundle.getRequiringBundles();
                         if (bundlesRequiring != null && arrayContains(bundlesRequiring, bundle)) {
@@ -435,9 +509,16 @@ public class FrameworkUtils {
                 }
             }
         }
+        // Handle fragment bundles
+        Bundle[] hosts = packageAdmin.getHosts(bundle);
+        if (hosts != null) {
+            for (Bundle host : hosts) {
+                dependencies.add(host);
+            }
+        }
         return getBundleIds(dependencies.toArray(new Bundle[dependencies.size()]));
     }
-
+    
     /**
      * Returns an array of ids of bundles that depend on the given bundle
      * 
@@ -453,18 +534,43 @@ public class FrameworkUtils {
         }
         if (packageAdmin == null) {
             throw new IllegalArgumentException("Argument packageAdmin cannot be null");
+        }        
+        Set<Bundle> dependencies = new HashSet<Bundle>();
+        // Handle imported packages (statically or dynamically)
+        ExportedPackage[] exportedPackages = packageAdmin.getExportedPackages(bundle);
+        if (exportedPackages != null) {
+            for (ExportedPackage exportedPackage : exportedPackages) {
+                Bundle[] importingBundles = exportedPackage.getImportingBundles();
+                if (importingBundles != null) {
+                    for (Bundle importingBundle : importingBundles) {
+                        dependencies.add(importingBundle);
+                    }
+                }
+            }
         }
-        long[] bundleIds = new long[0];
+        // Handle required bundles
         RequiredBundle[] requiredBundles = packageAdmin.getRequiredBundles(bundle.getSymbolicName());
         if (requiredBundles != null) {
             for (RequiredBundle requiredBundle : requiredBundles) {
                 Bundle required = requiredBundle.getBundle();
-                if (required != null && required.equals(bundle)) {
-                    bundleIds = getBundleIds(requiredBundle.getRequiringBundles());
+                if (required == bundle) {
+                    Bundle[] requiringBundles = requiredBundle.getRequiringBundles();
+                    if (requiringBundles != null) {
+                        for (Bundle requiringBundle : requiringBundles) {
+                            dependencies.add(requiringBundle);
+                        }
+                    }
                 }
             }
         }
-        return bundleIds;
+        // Handle fragment bundles
+        Bundle[] fragments = packageAdmin.getFragments(bundle);
+        if (fragments != null) {
+            for (Bundle fragment : fragments) {
+                dependencies.add(fragment);
+            }
+        }
+        return getBundleIds(dependencies.toArray(new Bundle[dependencies.size()]));
     }
 
     /**
@@ -518,11 +624,15 @@ public class FrameworkUtils {
      */
     public static List<String> extractHeaderDeclaration(String headerStatement) {
         List<String> result = new ArrayList<String>();
-        for (String headerDeclaration : headerStatement.split("\\s*,\\s*")) {
+        
+        for (String headerDeclaration : ManifestHeaderUtils.split(headerStatement, ",")) {
             String name = headerDeclaration.contains(";") ? headerDeclaration.substring(0, headerDeclaration
                     .indexOf(";")) : headerDeclaration;
             result.add(name);
         }
+        
         return result;
     }
+    
+    
 }

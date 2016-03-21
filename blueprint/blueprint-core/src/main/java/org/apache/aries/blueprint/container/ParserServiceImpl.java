@@ -25,21 +25,24 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.aries.blueprint.ComponentDefinitionRegistry;
-import org.apache.aries.blueprint.ParserService;
-import org.apache.aries.blueprint.container.NamespaceHandlerRegistry.NamespaceHandlerSet;
-import org.apache.aries.blueprint.namespace.ComponentDefinitionRegistryImpl;
+import org.apache.aries.blueprint.parser.ComponentDefinitionRegistryImpl;
+import org.apache.aries.blueprint.parser.NamespaceHandlerSet;
+import org.apache.aries.blueprint.parser.Parser;
+import org.apache.aries.blueprint.services.ParserService;
 import org.osgi.framework.Bundle;
 import org.xml.sax.SAXException;
 
 public class ParserServiceImpl implements ParserService {
 
-	NamespaceHandlerRegistry _namespaceHandlerRegistry;
-	
-	public ParserServiceImpl (NamespaceHandlerRegistry nhr) { 
-		_namespaceHandlerRegistry = nhr;
-	}
-	
-	public ComponentDefinitionRegistry parse(URL url, Bundle clientBundle) throws Exception {
+	final NamespaceHandlerRegistry _namespaceHandlerRegistry;
+    final boolean _ignoreUnknownNamespaceHandlers;
+
+  public ParserServiceImpl (NamespaceHandlerRegistry nhr, boolean ignoreUnknownNamespaceHandlers) { 
+    _namespaceHandlerRegistry = nhr;
+    _ignoreUnknownNamespaceHandlers = ignoreUnknownNamespaceHandlers;
+  }
+
+  public ComponentDefinitionRegistry parse(URL url, Bundle clientBundle) throws Exception {
     return parse (url, clientBundle, false);
   }
 
@@ -55,7 +58,7 @@ public class ParserServiceImpl implements ParserService {
   }
   
 	public ComponentDefinitionRegistry parse(List<URL> urls, Bundle clientBundle, boolean validate) throws Exception {
-	  Parser parser = new Parser();   
+	  Parser parser = new Parser(null, _ignoreUnknownNamespaceHandlers);   
 	  parser.parse(urls);
 	  return validateAndPopulate (parser, clientBundle, validate);
 	}
@@ -65,7 +68,7 @@ public class ParserServiceImpl implements ParserService {
   }
   
   public ComponentDefinitionRegistry parse(InputStream is, Bundle clientBundle, boolean validate) throws Exception {
-    Parser parser = new Parser();
+    Parser parser = new Parser(null, _ignoreUnknownNamespaceHandlers);
     parser.parse(is);
     return validateAndPopulate (parser, clientBundle, validate);
   }
@@ -73,12 +76,18 @@ public class ParserServiceImpl implements ParserService {
   private ComponentDefinitionRegistry validateAndPopulate (Parser parser, Bundle clientBundle, boolean validate) 
   throws IOException, SAXException { 
     Set<URI> nsuris = parser.getNamespaces();
+    ComponentDefinitionRegistry cdr;
     NamespaceHandlerSet nshandlers = _namespaceHandlerRegistry.getNamespaceHandlers(nsuris, clientBundle);
-    if (validate) { 
-      parser.validate( nshandlers.getSchema());
+    try {
+        if (validate) { 
+          parser.validate( nshandlers.getSchema());
+        }
+        cdr = new ComponentDefinitionRegistryImpl();
+        parser.populate(nshandlers, cdr);
+    } finally {
+        nshandlers.destroy();
     }
-    ComponentDefinitionRegistry cdr = new ComponentDefinitionRegistryImpl();
-    parser.populate(nshandlers, cdr);
+    
     return cdr;   
   }
 

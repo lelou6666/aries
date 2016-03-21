@@ -31,8 +31,6 @@ import org.apache.aries.application.DeploymentMetadata;
 
 /**
  * Metadata about an Aries application
- * @see <a href="http://incubator.apache.org/aries/applications.html">
- * http://incubator.apache.org/aries/applications.html</a>. 
  *
  */
 public interface AriesApplication

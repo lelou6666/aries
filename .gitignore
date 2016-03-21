@@ -8,4 +8,6 @@ target/
 *.iml
 *.iws
 *.ipr
+.idea
 velocity.log
+derby.log

@@ -21,7 +21,11 @@
     <parent>
         <groupId>org.apache.aries.samples.ariestrader</groupId>
         <artifactId>modules</artifactId>
+<<<<<<< HEAD
         <version>0.2-incubating-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.samples.ariestrader</groupId>
@@ -29,6 +33,19 @@
     <packaging>bundle</packaging>
     <name>AriesTrader :: Modules - Beans</name>
     <description>AriesTrader UnEnhanced Enttities Module</description>
+
+
+    <properties>
+         <!-- Export package versions handled with packageinfo. Override settings in default parent which cause build warnings -->
+         <aries.osgi.export>
+               org.apache.aries.samples.ariestrader.beans
+         </aries.osgi.export>
+         <aries.osgi.import>
+           org.apache.aries.samples.ariestrader.api.persistence;provide:=true,
+           *
+         </aries.osgi.import>
+         <aries.osgi.private.pkg />
+    </properties>
 
     <dependencies>
         <dependency>
@@ -42,21 +59,5 @@
             <scope>provided</scope>
         </dependency>
     </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.felix</groupId>
-                <artifactId>maven-bundle-plugin</artifactId>
-                <configuration>
-                    <instructions>
-                        <Bundle-SymbolicName>${pom.artifactId}</Bundle-SymbolicName>
-                        <Bundle-Version>${pom.version}</Bundle-Version>
-                        <Export-Package>
-                            org.apache.aries.samples.ariestrader.beans;version=${pom.version}
-                        </Export-Package>
-                    </instructions>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+
 </project>

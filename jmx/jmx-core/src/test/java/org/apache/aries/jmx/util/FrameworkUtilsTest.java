@@ -36,7 +36,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Dictionary;
+import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Set;
 
 import org.junit.Test;
 import org.osgi.framework.Bundle;
@@ -60,7 +62,7 @@ public class FrameworkUtilsTest {
     @Test
     public void testGetBundleIds() throws Exception {
 
-        assertEquals(0, getBundleIds(null).length);
+        assertEquals(0, getBundleIds((Bundle[])null).length);
         assertEquals(0, getBundleIds(new Bundle[0]).length);
         
         Bundle b1 = mock(Bundle.class);
@@ -137,7 +139,6 @@ public class FrameworkUtilsTest {
         when(ep2.getImportingBundles()).thenReturn(new Bundle[] { bundle, b3 });
         when(ep2.getName()).thenReturn("org.apache.aries.jmx.b2");
         when(ep2.getVersion()).thenReturn(Version.parseVersion("2.0.1"));
-       
         
         PackageAdmin admin = mock(PackageAdmin.class);
         when(admin.getExportedPackages(b1)).thenReturn(new ExportedPackage[] { ep1 });
@@ -153,7 +154,7 @@ public class FrameworkUtilsTest {
         
         //check with ImportPackage statement
         headers.remove(Constants.DYNAMICIMPORT_PACKAGE);
-        String importPackageStatement = "org.apache.aries.jmx.b1;version=0.0.0;resolution:=optional,org.apache.aries.jmx.b2;attribute:=value"; 
+        String importPackageStatement = "org.apache.aries.jmx.b1;version=0.0.0;resolution:=optional,org.apache.aries.jmx.b2;attribute:=value;version=\"[2.0, 3.0)\""; 
         headers.put(Constants.IMPORT_PACKAGE, importPackageStatement);
         when(admin.getExportedPackages("org.apache.aries.jmx.b1")).thenReturn(new ExportedPackage[] { ep1 });
         when(admin.getExportedPackages("org.apache.aries.jmx.b2")).thenReturn(new ExportedPackage[] { ep2 });
@@ -279,10 +280,15 @@ public class FrameworkUtilsTest {
         when(admin.getRequiredBundles("b2")).thenReturn(new RequiredBundle[] { rb2 });
         when(admin.getRequiredBundles("b3")).thenReturn(new RequiredBundle[] { rb3 });
         
-        assertArrayEquals(new long[] { 44, 66 }, getBundleDependencies(context, bundle, admin));
-        
-        
+        assertEquals(toSet(new long[] { 44, 66 }), toSet(getBundleDependencies(context, bundle, admin)));
     }
     
+    private static Set<Long> toSet(long[] array) {
+        Set<Long> set = new HashSet<Long>();
+        for (long value : array) {
+            set.add(value);
+        }
+        return set;
+    }
     
 }

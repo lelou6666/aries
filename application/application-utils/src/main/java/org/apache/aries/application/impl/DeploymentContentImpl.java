@@ -19,18 +19,18 @@
 
 package org.apache.aries.application.impl;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.aries.application.DeploymentContent;
-import org.apache.aries.application.VersionRange;
 import org.apache.aries.application.utils.AppConstants;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor.NameValueMap;
+import org.apache.aries.util.VersionRange;
+import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.osgi.framework.Version;
 
 public final class DeploymentContentImpl implements DeploymentContent {
   
-  private ContentImpl _content;
+  private final ContentImpl _content;
   
   /**
    * DeploymentContent relates to a bundle at a particular version. 
@@ -40,7 +40,7 @@ public final class DeploymentContentImpl implements DeploymentContent {
    * @param version
    */
   public DeploymentContentImpl (String bundleSymbolicName, Version version) {
-    NameValueMap<String, String> nvMap = new NameValueMap<String, String>();
+    Map<String, String> nvMap = new HashMap<String, String>();
     nvMap.put(AppConstants.DEPLOYMENT_BUNDLE_VERSION, version.toString());
     _content = new ContentImpl (bundleSymbolicName, nvMap);
   }
@@ -108,7 +108,8 @@ public final class DeploymentContentImpl implements DeploymentContent {
     return _content.getNameValueMap();
   }
   
-  public String toString()
+  @Override
+public String toString()
   {
     return _content.toString();
   }

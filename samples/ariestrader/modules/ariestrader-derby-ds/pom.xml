@@ -21,15 +21,23 @@
     <parent>
         <groupId>org.apache.aries.samples.ariestrader</groupId>
         <artifactId>modules</artifactId>
+<<<<<<< HEAD
         <version>0.2-incubating-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
-
+     
     <groupId>org.apache.aries.samples.ariestrader</groupId>
     <artifactId>org.apache.aries.samples.ariestrader.derby.ds</artifactId>
     <packaging>bundle</packaging>
     <name>AriesTrader :: Modules - Derby DataSource</name>
     <description>AriesTrader Derby DataSource</description>
 
+    <properties>
+         <aries.osgi.export.pkg />
+         <aries.osgi.private.pkg />
+    </properties>
     <dependencies>
         <dependency>
             <groupId>org.apache.derby</groupId>
@@ -38,7 +46,6 @@
         <dependency>
             <groupId>org.apache.aries.transaction</groupId>
             <artifactId>org.apache.aries.transaction.blueprint</artifactId>
-            <version>${ariesTransactionVersion}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.geronimo.components</groupId>
@@ -46,18 +53,4 @@
         </dependency>
     </dependencies>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.felix</groupId>
-                <artifactId>maven-bundle-plugin</artifactId>
-                <configuration>
-                    <instructions>
-                        <Bundle-SymbolicName>${pom.artifactId}</Bundle-SymbolicName>
-                        <Bundle-Version>${pom.version}</Bundle-Version>
-                    </instructions>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 </project>

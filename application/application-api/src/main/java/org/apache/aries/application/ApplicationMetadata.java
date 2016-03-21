@@ -21,14 +21,13 @@ package org.apache.aries.application;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Collection;
 import java.util.List;
 
 import org.osgi.framework.Version;
 
 /**
  * A representation of an APPLICATION.MF file. 
- * @see <a href="http://incubator.apache.org/aries/applications.html">
- * http://incubator.apache.org/aries/applications.html</a>. 
  *
  */
 public interface ApplicationMetadata
@@ -75,6 +74,12 @@ public interface ApplicationMetadata
    * @return    the value of the AppScope
    */
   public String getApplicationScope();
+  
+  /**
+   * get the list of use-bundle content including bundle symbolic name and version range
+   * @return the collection of use bundles.
+   */
+  public Collection<Content> getUseBundles();
   
   /** 
    * Persist this metadata. 

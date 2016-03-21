@@ -20,6 +20,12 @@ package org.apache.aries.blueprint.utils;
 
 import java.io.IOException;
 import java.net.URL;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 
 import org.osgi.framework.Bundle;
@@ -28,7 +34,11 @@ import org.osgi.framework.Bundle;
  * A ClassLoader delegating to a given OSGi bundle.
  *
  * @version $Rev$, $Date$
+ * @deprecated - will be removed in a future version of Aries Blueprint
+ *           Use AriesFrameworkUtil#getClassLoader(Bundle) and
+ *           or AriesFrameworkUtil#getClassLoaderForced(Bundle) instead     
  */
+@Deprecated
 public class BundleDelegatingClassLoader extends ClassLoader {
 
     private final Bundle bundle;
@@ -43,23 +53,62 @@ public class BundleDelegatingClassLoader extends ClassLoader {
         this.classLoader = classLoader;
     }
 
-    protected Class findClass(String name) throws ClassNotFoundException {
-        return bundle.loadClass(name);
+    protected Class<?> findClass(final String name) throws ClassNotFoundException {
+        try {
+            return AccessController.doPrivileged(new PrivilegedExceptionAction<Class<?>>() {
+                public Class<?> run() throws ClassNotFoundException 
+                {
+                    return bundle.loadClass(name);
+                }
+            
+            });
+        } catch (PrivilegedActionException e) {
+            Exception cause = e.getException();
+          
+            if (cause instanceof ClassNotFoundException) throw (ClassNotFoundException)cause;
+            else throw (RuntimeException)cause;
+        }    
     }
 
-    protected URL findResource(String name) {
-        URL resource = bundle.getResource(name);
+    protected URL findResource(final String name) {
+        URL resource = AccessController.doPrivileged(new PrivilegedAction<URL>() {
+            public URL run()
+            {
+                return bundle.getResource(name);
+            }
+        });        
         if (classLoader != null && resource == null) {
             resource = classLoader.getResource(name);
         }
         return resource;
     }
 
-    protected Enumeration findResources(String name) throws IOException {
-        return bundle.getResources(name);
+    protected Enumeration<URL> findResources(final String name) throws IOException {
+        Enumeration<URL> urls;
+        try {
+            urls =  AccessController.doPrivileged(new PrivilegedExceptionAction<Enumeration<URL>>() {
+                @SuppressWarnings("unchecked")
+                public Enumeration<URL> run() throws IOException
+                {
+                    return (Enumeration<URL>)bundle.getResources(name);
+                }
+          
+            });
+        } catch (PrivilegedActionException e) {
+            Exception cause = e.getException();
+        
+            if (cause instanceof IOException) throw (IOException)cause;
+            else throw (RuntimeException)cause;
+        }
+      
+        if (urls == null) {
+            urls = Collections.enumeration(new ArrayList<URL>());
+        }
+      
+        return urls;    
     }
 
-    protected Class loadClass(String name, boolean resolve) throws ClassNotFoundException {
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         Class clazz;
         try {
             clazz = findClass(name);
@@ -69,10 +118,10 @@ public class BundleDelegatingClassLoader extends ClassLoader {
                 try {
                     clazz = classLoader.loadClass(name);
                 } catch (ClassNotFoundException e) {
-                    throw new ClassNotFoundException(name + " from bundle " + bundle.getBundleId() + " (" + bundle.getSymbolicName() + ")", cnfe);
+                    throw new ClassNotFoundException(name + " from bundle " + bundle.getSymbolicName() + "/" + bundle.getVersion(), cnfe);
                 }
             } else {
-                throw new ClassNotFoundException(name + " from bundle " + bundle.getBundleId() + " (" + bundle.getSymbolicName() + ")", cnfe);
+                throw new ClassNotFoundException(name + " from bundle " + bundle.getSymbolicName() + "/" + bundle.getVersion(), cnfe);
             }
         }
         if (resolve) {

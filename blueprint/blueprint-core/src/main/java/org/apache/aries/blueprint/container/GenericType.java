@@ -23,10 +23,13 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
+import java.security.AccessController;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.aries.blueprint.ExtendedBlueprintContainer;
+import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
 import org.apache.aries.blueprint.di.ExecutionContext;
 import org.osgi.framework.Bundle;
 import org.osgi.service.blueprint.container.ReifiedType;
@@ -53,19 +56,31 @@ public class GenericType extends ReifiedType {
         primitiveClasses.put("boolean", boolean.class);
     }
 
+    enum BoundType {
+        Exact,
+        Extends,
+        Super
+    }
+
     private GenericType[] parameters;
+    private BoundType boundType;
 
 	public GenericType(Type type) {
-		this(getConcreteClass(type), parametersOf(type));
+		this(getConcreteClass(type), boundType(type), parametersOf(type));
 	}
 
     public GenericType(Class clazz, GenericType... parameters) {
-        super(clazz);
-        this.parameters = parameters;
+        this(clazz, BoundType.Exact, parameters);
     }
 
-    public static GenericType parse(String type, Object loader) throws ClassNotFoundException, IllegalArgumentException {
-        type = type.trim();
+    public GenericType(Class clazz, BoundType boundType, GenericType... parameters) {
+        super(clazz);
+        this.parameters = parameters;
+        this.boundType = boundType;
+    }
+
+    public static GenericType parse(String rawType, final Object loader) throws ClassNotFoundException, IllegalArgumentException {
+        final String type = rawType.trim();
         // Check if this is an array
         if (type.endsWith("[]")) {
             GenericType t = parse(type.substring(0, type.length() - 2), loader);
@@ -89,11 +104,33 @@ public class GenericType extends ReifiedType {
         if (primitiveClasses.containsKey(type)) {
             return new GenericType(primitiveClasses.get(type));
         }
+        // Extends
+        if (type.startsWith("? extends ")) {
+            String raw = type.substring("? extends ".length());
+            return new GenericType(((ClassLoader) loader).loadClass(raw), BoundType.Extends);
+        }
+        // Super
+        if (type.startsWith("? super ")) {
+            String raw = type.substring("? extends ".length());
+            return new GenericType(((ClassLoader) loader).loadClass(raw), BoundType.Super);
+        }
         // Class
         if (loader instanceof ClassLoader) {
             return new GenericType(((ClassLoader) loader).loadClass(type));
         } else if (loader instanceof Bundle) {
-            return new GenericType(((Bundle) loader).loadClass(type));
+            try {
+              return AccessController.doPrivileged(new PrivilegedExceptionAction<GenericType>() {
+                public GenericType run() throws ClassNotFoundException {
+                  return new GenericType(((Bundle) loader).loadClass(type));
+                }
+              });
+            } catch (PrivilegedActionException pae) {
+              Exception e = pae.getException();
+              if (e instanceof ClassNotFoundException) 
+                throw (ClassNotFoundException) e;
+              else
+                throw (RuntimeException) e;
+            }
         } else if (loader instanceof ExecutionContext) {
             return new GenericType(((ExecutionContext) loader).loadClass(type));
         } else if (loader instanceof ExtendedBlueprintContainer) {
@@ -118,6 +155,12 @@ public class GenericType extends ReifiedType {
 
     @Override
     public String toString() {
+        StringBuilder sb = new StringBuilder();
+        if (boundType == BoundType.Extends) {
+            sb.append("? extends ");
+        } else if (boundType == BoundType.Super) {
+            sb.append("? super ");
+        }
         Class cl = getRawClass();
         if (cl.isArray()) {
             if (parameters.length > 0) {
@@ -126,9 +169,8 @@ public class GenericType extends ReifiedType {
                 return cl.getComponentType().getName() + "[]";
             }
         }
+        sb.append(cl.getName());
         if (parameters.length > 0) {
-            StringBuilder sb = new StringBuilder();
-            sb.append(cl.getName());    
             sb.append("<");
             for (int i = 0; i < parameters.length; i++) {
                 if (i > 0) {
@@ -137,9 +179,8 @@ public class GenericType extends ReifiedType {
                 sb.append(parameters[i].toString());
             }
             sb.append(">");   
-            return sb.toString();
         }
-        return cl.getName();
+        return sb.toString();
     }
 
     public boolean equals(Object object) {
@@ -148,6 +189,9 @@ public class GenericType extends ReifiedType {
         }
         GenericType other = (GenericType) object;
         if (getRawClass() != other.getRawClass()) {
+            return false;
+        }
+        if (boundType != other.boundType) {
             return false;
         }
         if (parameters == null) {
@@ -167,7 +211,33 @@ public class GenericType extends ReifiedType {
             return true;
         }
     }
-    
+
+    static ReifiedType bound(ReifiedType type) {
+        if (type instanceof GenericType
+                && ((GenericType) type).boundType != BoundType.Exact) {
+            GenericType t = (GenericType) type;
+            return new GenericType(t.getRawClass(), BoundType.Exact, t.parameters);
+        }
+        return type;
+    }
+
+    static BoundType boundType(ReifiedType type) {
+        if (type instanceof GenericType) {
+            return ((GenericType) type).boundType;
+        } else {
+            return BoundType.Exact;
+        }
+    }
+
+    static BoundType boundType(Type type) {
+        if (type instanceof WildcardType) {
+            WildcardType wct = (WildcardType) type;
+            return wct.getLowerBounds().length == 0
+                    ? BoundType.Extends : BoundType.Super;
+        }
+        return BoundType.Exact;
+    }
+
     static GenericType[] parametersOf(Type type) {
 		if (type instanceof Class) {
 		    Class clazz = (Class) type;

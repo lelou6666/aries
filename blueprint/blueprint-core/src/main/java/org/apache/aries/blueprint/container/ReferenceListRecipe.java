@@ -18,21 +18,17 @@
  */
 package org.apache.aries.blueprint.container;
 
-import java.util.AbstractCollection;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.RandomAccess;
+import java.util.*;
 import java.util.concurrent.Callable;
 
-import org.apache.aries.blueprint.ExtendedBlueprintContainer;
+import org.apache.aries.blueprint.di.ValueRecipe;
+import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
 import org.apache.aries.blueprint.ExtendedReferenceListMetadata;
 import org.apache.aries.blueprint.di.Recipe;
 import org.apache.aries.blueprint.di.CollectionRecipe;
 import org.apache.aries.blueprint.utils.DynamicCollection;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
 import org.osgi.framework.ServiceReference;
 import org.osgi.service.blueprint.container.ReifiedType;
@@ -56,13 +52,14 @@ public class ReferenceListRecipe extends AbstractServiceReferenceRecipe {
     private final DynamicCollection<ServiceDispatcher> storage = new DynamicCollection<ServiceDispatcher>();
     private final List<ServiceDispatcher> unboundDispatchers = new ArrayList<ServiceDispatcher>();
     private final Object monitor = new Object();
-    
+
     public ReferenceListRecipe(String name,
                          ExtendedBlueprintContainer blueprintContainer,
                          ReferenceListMetadata metadata,
+                         ValueRecipe filterRecipe,
                          CollectionRecipe listenersRecipe,
                          List<Recipe> explicitDependencies) {
-        super(name, blueprintContainer, metadata, listenersRecipe, explicitDependencies);
+        super(name, blueprintContainer, metadata, filterRecipe, listenersRecipe, explicitDependencies);
         this.metadata = metadata;
     }
 
@@ -117,14 +114,14 @@ public class ReferenceListRecipe extends AbstractServiceReferenceRecipe {
                     }
                 } else {
                     dispatcher = new ServiceDispatcher(reference);
-                    List<String> interfaces = new ArrayList<String>();
-                    if (metadata.getInterface() != null) {
-                        interfaces.add(metadata.getInterface());
-                    }
+                    Set<Class<?>> interfaces = new HashSet<Class<?>>();
+                    Class<?> clz = getInterfaceClass();
+                    if (clz != null) interfaces.add(clz);
                     if (metadata instanceof ExtendedReferenceListMetadata) {
                         boolean greedy = (((ExtendedReferenceListMetadata) metadata).getProxyMethod() & ExtendedReferenceListMetadata.PROXY_METHOD_GREEDY) != 0;
                         if (greedy) {
-                            interfaces = Arrays.asList((String[]) reference.getProperty(Constants.OBJECTCLASS));
+                            List<String> ifs = Arrays.asList((String[]) reference.getProperty(Constants.OBJECTCLASS));
+                            interfaces.addAll(loadAllClasses(ifs));
                         }
                     }
                     dispatcher.proxy = createProxy(dispatcher, interfaces);
@@ -191,19 +188,30 @@ public class ReferenceListRecipe extends AbstractServiceReferenceRecipe {
 
         public synchronized void destroy() {
             if (reference != null) {
-                reference.getBundle().getBundleContext().ungetService(reference);
+                ServiceReference ref = reference;
                 reference = null;
                 service = null;
                 proxy = null;
+                Bundle bundle = ref.getBundle();
+                if (bundle != null) {
+                    BundleContext ctx = getBundleContextForServiceLookup();
+                    if (ctx != null) {
+                      try {
+                          ctx.ungetService(ref);
+                      } catch (IllegalStateException ise) {
+                        // we don't care it doesn't exist so, shrug.
+                      }
+                    }
+                }
             }
         }
 
         public synchronized Object call() throws Exception {
-            if (reference == null) {
-                throw new ServiceUnavailableException("Service is unavailable", getOsgiFilter());
+            if (service == null && reference != null) {
+                service = getServiceSecurely(reference);
             }
             if (service == null) {
-                service = blueprintContainer.getService(reference);
+                throw new ServiceUnavailableException("Service is unavailable", getOsgiFilter());
             }
             return service;
         }

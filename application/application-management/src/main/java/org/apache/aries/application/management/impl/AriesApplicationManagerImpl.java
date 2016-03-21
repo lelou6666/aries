@@ -24,10 +24,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.JarURLConnection;
 import java.net.URL;
 import java.util.Collections;
+import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -38,32 +41,39 @@ import org.apache.aries.application.ApplicationMetadata;
 import org.apache.aries.application.ApplicationMetadataFactory;
 import org.apache.aries.application.DeploymentMetadata;
 import org.apache.aries.application.DeploymentMetadataFactory;
-import org.apache.aries.application.filesystem.IDirectory;
-import org.apache.aries.application.filesystem.IFile;
 import org.apache.aries.application.management.AriesApplication;
 import org.apache.aries.application.management.AriesApplicationContext;
-import org.apache.aries.application.management.AriesApplicationContextManager;
 import org.apache.aries.application.management.AriesApplicationListener;
 import org.apache.aries.application.management.AriesApplicationManager;
-import org.apache.aries.application.management.AriesApplicationResolver;
-import org.apache.aries.application.management.BundleConverter;
 import org.apache.aries.application.management.BundleInfo;
-import org.apache.aries.application.management.ConversionException;
-import org.apache.aries.application.management.LocalPlatform;
 import org.apache.aries.application.management.ManagementException;
 import org.apache.aries.application.management.ResolveConstraint;
 import org.apache.aries.application.management.ResolverException;
+import org.apache.aries.application.management.UpdateException;
 import org.apache.aries.application.management.internal.MessageUtil;
+import org.apache.aries.application.management.repository.ApplicationRepository;
+import org.apache.aries.application.management.spi.convert.BundleConversion;
+import org.apache.aries.application.management.spi.convert.BundleConverter;
+import org.apache.aries.application.management.spi.convert.ConversionException;
+import org.apache.aries.application.management.spi.repository.BundleRepository;
+import org.apache.aries.application.management.spi.resolve.DeploymentManifestManager;
+import org.apache.aries.application.management.spi.runtime.AriesApplicationContextManager;
+import org.apache.aries.application.management.spi.runtime.LocalPlatform;
 import org.apache.aries.application.utils.AppConstants;
-import org.apache.aries.application.utils.filesystem.FileSystem;
-import org.apache.aries.application.utils.filesystem.IOUtils;
 import org.apache.aries.application.utils.management.SimpleBundleInfo;
-import org.apache.aries.application.utils.manifest.BundleManifest;
 import org.apache.aries.application.utils.manifest.ManifestDefaultsInjector;
-import org.apache.aries.application.utils.manifest.ManifestProcessor;
-import org.osgi.framework.Bundle;
+import org.apache.aries.util.filesystem.FileSystem;
+import org.apache.aries.util.filesystem.IDirectory;
+import org.apache.aries.util.filesystem.IFile;
+import org.apache.aries.util.io.IOUtils;
+import org.apache.aries.util.manifest.BundleManifest;
+import org.apache.aries.util.manifest.ManifestProcessor;
+import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
+import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.ServiceException;
+import org.osgi.framework.ServiceReference;
+import org.osgi.framework.ServiceRegistration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,10 +82,15 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
   private ApplicationMetadataFactory _applicationMetadataFactory;
   private DeploymentMetadataFactory _deploymentMetadataFactory;
   private List<BundleConverter> _bundleConverters;
-  private AriesApplicationResolver _resolver;
+
   private LocalPlatform _localPlatform;
   private AriesApplicationContextManager _applicationContextManager;
+  private BundleContext _bundleContext;
 
+  private DeploymentManifestManager deploymentManifestManager;
+  
+  private Map<AriesApplication, ServiceRegistration> serviceRegistrations = new HashMap<AriesApplication, ServiceRegistration>();
+  
   private static final Logger _logger = LoggerFactory.getLogger("org.apache.aries.application.management.impl");
 
   public void setApplicationMetadataFactory (ApplicationMetadataFactory amf) { 
@@ -90,8 +105,8 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
     _bundleConverters = bcs;
   }
   
-  public void setResolver (AriesApplicationResolver resolver) { 
-    _resolver = resolver;
+  public void setDeploymentManifestManager(DeploymentManifestManager dm) {
+    this.deploymentManifestManager = dm;
   }
 
   public void setLocalPlatform (LocalPlatform lp) { 
@@ -102,59 +117,64 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
     _applicationContextManager = acm;
   }
   
+  public void setBundleContext(BundleContext b)
+  {
+    _bundleContext = b;
+  }
+  
   
   /**
    * Create an AriesApplication from a .eba file: a zip file with a '.eba' extension
-   * as per http://incubator.apache.org/aries/applications.html 
    */
   public AriesApplication createApplication(IDirectory ebaFile) throws ManagementException {
     ApplicationMetadata applicationMetadata = null;
     DeploymentMetadata deploymentMetadata = null;
-    Map<String, InputStream> modifiedBundles = new HashMap<String, InputStream>();
+    Map<String, BundleConversion> modifiedBundles = new HashMap<String, BundleConversion>();
     AriesApplicationImpl application = null;
-    
-    try { 
+    String appPath = ebaFile.toString();
+    try {   
+      // try to read the app name out of the application.mf
       Manifest applicationManifest = parseApplicationManifest (ebaFile);
-      ManifestDefaultsInjector.updateManifest(applicationManifest, ebaFile.getName(), ebaFile); 
-      applicationMetadata = _applicationMetadataFactory.createApplicationMetadata(applicationManifest);
+      String appName = applicationManifest.getMainAttributes().getValue(AppConstants.APPLICATION_NAME);
 
-      IFile deploymentManifest = ebaFile.getFile(AppConstants.DEPLOYMENT_MF);
-      if (deploymentManifest != null) { 
-        deploymentMetadata = _deploymentMetadataFactory.createDeploymentMetadata(deploymentManifest);
-        
-        // Validate: symbolic names must match
-        String appSymbolicName = applicationMetadata.getApplicationSymbolicName();
-        String depSymbolicName = applicationMetadata.getApplicationSymbolicName();
-        if (!appSymbolicName.equals(depSymbolicName)) {
-          throw new ManagementException (MessageUtil.getMessage("APPMANAGEMENT0002E", ebaFile.getName(), appSymbolicName, depSymbolicName));
-        }
+      //If the application name is null, we will try to get the file name.
+      if (appName == null || appName.isEmpty()) {
+          String fullPath = appPath;
+          if (fullPath.endsWith("/")) {
+            fullPath = fullPath.substring(0, fullPath.length() -1);  
+          }
+              
+          int last_slash = fullPath.lastIndexOf("/");
+          appName = fullPath.substring(last_slash + 1, fullPath.length()); 
       }
-      
+                  
+      IFile deploymentManifest = ebaFile.getFile(AppConstants.DEPLOYMENT_MF);
       /* We require that all other .jar and .war files included by-value be valid bundles
        * because a DEPLOYMENT.MF has been provided. If no DEPLOYMENT.MF, migrate 
        * wars to wabs, plain jars to bundles
        */
-        
       Set<BundleInfo> extraBundlesInfo = new HashSet<BundleInfo>();
       for (IFile f : ebaFile) { 
         if (f.isDirectory()) { 
           continue;
         }
-        
         BundleManifest bm = getBundleManifest (f);
         if (bm != null) {
           if (bm.isValid()) {
-            extraBundlesInfo.add(new SimpleBundleInfo(_applicationMetadataFactory, bm, f.toURL().toExternalForm()));
-          } else if (deploymentMetadata != null) {
-            throw new ManagementException (MessageUtil.getMessage("APPMANAGEMENT0003E", f.getName(), ebaFile.getName()));
-          } else { 
-            // We have a jar that needs converting to a bundle, or a war to migrate to a WAB
-            InputStream convertedBinary = null;
+            _logger.debug("File {} is a valid bundle. Adding it to bundle list.", f.getName());
+            extraBundlesInfo.add(new SimpleBundleInfo(bm, f.toURL().toExternalForm()));
+          } else if (deploymentManifest == null) { 
+            _logger.debug("File {} is not a valid bundle. Attempting to convert it.", f.getName());
+            // We have a jar that needs converting to a bundle, or a war to migrate to a WAB 
+            // We only do this if a DEPLOYMENT.MF does not exist.
+            BundleConversion convertedBinary = null;
             Iterator<BundleConverter> converters = _bundleConverters.iterator();
             List<ConversionException> conversionExceptions = Collections.emptyList();
             while (converters.hasNext() && convertedBinary == null) { 
-              try { 
-                convertedBinary = converters.next().convert(ebaFile, f);
+              try {
+            	BundleConverter converter = converters.next();
+            	_logger.debug("Converting file using {} converter", converter);
+                convertedBinary = converter.convert(ebaFile, f);
               } catch (ServiceException sx) {
                 // We'll get this if our optional BundleConverter has not been injected. 
               } catch (ConversionException cx) { 
@@ -163,17 +183,43 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
             }
             if (conversionExceptions.size() > 0) {
               for (ConversionException cx : conversionExceptions) { 
-                _logger.error("APPMANAGEMENT0004E", new Object[]{f.getName(), ebaFile.getName(), cx});
+                _logger.error("APPMANAGEMENT0004E", new Object[]{f.getName(), appName, cx});
               }
-              throw new ManagementException (MessageUtil.getMessage("APPMANAGEMENT0005E", ebaFile.getName()));
+              throw new ManagementException (MessageUtil.getMessage("APPMANAGEMENT0005E", appName));
             }
             if (convertedBinary != null) { 
-              modifiedBundles.put (f.getName(), convertedBinary);
-              bm = BundleManifest.fromBundle(f);
-              extraBundlesInfo.add(new SimpleBundleInfo(_applicationMetadataFactory, bm, f.getName()));
+              _logger.debug("File {} was successfully converted. Adding it to bundle list.", f.getName());
+              modifiedBundles.put (f.getName(), convertedBinary);             
+              extraBundlesInfo.add(convertedBinary.getBundleInfo());
+            } else {
+              _logger.debug("File {} was not converted.", f.getName());
             }
+          } else {
+            _logger.debug("File {} was ignored. It is not a valid bundle and DEPLOYMENT.MF is present", f.getName());
           }
-        } 
+        } else {
+          _logger.debug("File {} was ignored. It has no manifest file.", f.getName());
+        }
+      }
+ 
+      // if Application-Content header was not specified build it based on the bundles included by value
+      if (applicationManifest.getMainAttributes().getValue(AppConstants.APPLICATION_CONTENT) == null) {
+          String appContent = buildAppContent(extraBundlesInfo);
+          applicationManifest.getMainAttributes().putValue(AppConstants.APPLICATION_CONTENT, appContent);
+      }
+      
+      ManifestDefaultsInjector.updateManifest(applicationManifest, appName, ebaFile); 
+      applicationMetadata = _applicationMetadataFactory.createApplicationMetadata(applicationManifest);
+      
+      if (deploymentManifest != null) { 
+        deploymentMetadata = _deploymentMetadataFactory.parseDeploymentMetadata(deploymentManifest);
+        
+        // Validate: symbolic names must match
+        String appSymbolicName = applicationMetadata.getApplicationSymbolicName();
+        String depSymbolicName = deploymentMetadata.getApplicationSymbolicName();
+        if (!appSymbolicName.equals(depSymbolicName)) {
+          throw new ManagementException (MessageUtil.getMessage("APPMANAGEMENT0002E", appName, appSymbolicName, depSymbolicName));
+        }
       }
 
       application = new AriesApplicationImpl (applicationMetadata, extraBundlesInfo, _localPlatform);
@@ -181,12 +227,36 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
       // Store a reference to any modified bundles
       application.setModifiedBundles (modifiedBundles);
     } catch (IOException iox) {
-      _logger.error ("APPMANAGEMENT0006E", new Object []{ebaFile.getName(), iox});
+      _logger.error ("APPMANAGEMENT0006E", new Object []{appPath, iox});
       throw new ManagementException(iox);
     }
     return application;
   }
 
+  private String buildAppContent(Set<BundleInfo> bundleInfos) {
+      StringBuilder builder = new StringBuilder();
+      Iterator<BundleInfo> iterator = bundleInfos.iterator();
+      while (iterator.hasNext()) {
+          BundleInfo info = iterator.next();
+          builder.append(info.getSymbolicName());
+
+          // bundle version is not a required manifest header
+          if (info.getVersion() != null) {
+              String version = info.getVersion().toString();
+              builder.append(";version=\"[");
+              builder.append(version);
+              builder.append(',');
+              builder.append(version);
+              builder.append("]\"");
+          }
+
+          if (iterator.hasNext()) {
+              builder.append(",");
+          }
+      }
+      return builder.toString();
+  }
+  
   /**
    * Create an application from a URL. 
    * The first version of this method isn't smart enough to check whether
@@ -213,28 +283,91 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
 
   public AriesApplication resolve(AriesApplication originalApp, ResolveConstraint... constraints) throws ResolverException {
     AriesApplicationImpl application = new AriesApplicationImpl(originalApp.getApplicationMetadata(), originalApp.getBundleInfo(), _localPlatform);
-    Set<BundleInfo> additionalBundlesRequired = _resolver.resolve(application, constraints);
-    DeploymentMetadata deploymentMetadata = _deploymentMetadataFactory.createDeploymentMetadata(application, additionalBundlesRequired);
-    application.setDeploymentMetadata(deploymentMetadata);
+    Manifest deploymentManifest = deploymentManifestManager.generateDeploymentManifest(originalApp, constraints);
+    try {
+      application.setDeploymentMetadata(_deploymentMetadataFactory.createDeploymentMetadata(deploymentManifest));
+    } catch (IOException ioe) {
+      throw new ResolverException(ioe);
+    }
     // Store a reference to any modified bundles
     if (originalApp instanceof AriesApplicationImpl) {
-        // TODO: are we really passing streams around ?
-        application.setModifiedBundles(((AriesApplicationImpl) originalApp).getModifiedBundles());
+      // TODO: are we really passing streams around ?
+      application.setModifiedBundles(((AriesApplicationImpl) originalApp).getModifiedBundles());
     }
     return application;
   } 
 
   public AriesApplicationContext install(AriesApplication app) throws BundleException, ManagementException, ResolverException {
+    
     if (!app.isResolved()) {
-        app = resolve(app);
+      app = resolve(app);
     }
+  
+    // Register an Application Repository for this application if none exists
+    String appScope = app.getApplicationMetadata().getApplicationScope();    
+    ServiceReference[] ref = null;
+    try {
+        String filter = "(" + BundleRepository.REPOSITORY_SCOPE + "=" + appScope + ")";
+        ref = _bundleContext.getServiceReferences(BundleRepository.class.getName(),filter);
+    } 
+    catch (InvalidSyntaxException e) {
+        // Something went wrong attempting to find a service so we will act as if 
+        // there is no existing service.
+    }
+    
+    if (ref == null || ref.length == 0) {
+        Dictionary dict = new Hashtable();
+        dict.put(BundleRepository.REPOSITORY_SCOPE, appScope);
+        ServiceRegistration serviceReg = _bundleContext.registerService(BundleRepository.class.getName(), 
+            new ApplicationRepository(app), 
+            dict);
+        serviceRegistrations.put(app, serviceReg);
+    }
+  
     AriesApplicationContext result = _applicationContextManager.getApplicationContext(app);
+    
+    // When installing bundles in the .eba file we use the jar url scheme. This results in a
+    // JarFile being held open, which is bad as on windows we cannot delete the .eba file
+    // so as a work around we open a url connection to one of the bundles in the eba and
+    // if it is a jar url we close the associated JarFile.
+    
+    Iterator<BundleInfo> bi = app.getBundleInfo().iterator();
+    
+    if (bi.hasNext()) {
+      String location = bi.next().getLocation();
+      if (location.startsWith("jar")) {
+        try {
+          URL url = new URL(location);
+          JarURLConnection urlc = (JarURLConnection) url.openConnection();
+          
+          // Make sure that we pick up the cached version rather than creating a new one
+          urlc.setUseCaches(true);
+          urlc.getJarFile().close();
+        } catch (IOException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+      }
+    }
+    
     return result;
   }
   
-  public void uninstall(AriesApplicationContext app) throws BundleException 
+  public void uninstall(AriesApplicationContext appContext) throws BundleException 
   {
-    _applicationContextManager.remove(app);
+    _applicationContextManager.remove(appContext);
+    
+    // Also unregister the service if we added one for it
+    AriesApplication app = appContext.getApplication();
+    if (app != null) {
+      ServiceRegistration reg = serviceRegistrations.remove(app);
+      if (reg != null) 
+        try {
+          reg.unregister();
+        } catch (IllegalStateException e) {
+          // Must be already unregistered - ignore
+        }
+    }
   }
 
   public void addApplicationListener(AriesApplicationListener l) {
@@ -289,4 +422,38 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
     return mf;
   }
 
+  public AriesApplicationContext update(AriesApplication app, DeploymentMetadata depMf) throws UpdateException {
+    if (!(app instanceof AriesApplicationImpl)) throw new IllegalArgumentException("Argument is not AriesApplication created by this manager");
+    
+    if (!!!app.getApplicationMetadata().getApplicationSymbolicName().equals(depMf.getApplicationSymbolicName())
+        || !!!app.getApplicationMetadata().getApplicationVersion().equals(depMf.getApplicationVersion())) {
+      throw new IllegalArgumentException("The deployment metadata does not match the application.");
+    }
+    
+    DeploymentMetadata oldMetadata = app.getDeploymentMetadata();
+    
+    AriesApplicationContext foundCtx = null;
+    for (AriesApplicationContext ctx : _applicationContextManager.getApplicationContexts()) {
+      if (ctx.getApplication().equals(app)) {
+        foundCtx = ctx;
+        break;
+      }
+    }
+    
+    ((AriesApplicationImpl) app).setDeploymentMetadata(depMf);
+    
+    if (foundCtx != null) {
+      try {
+        return _applicationContextManager.update(app, oldMetadata);
+      } catch (UpdateException ue) {
+        if (ue.hasRolledBack()) {
+          ((AriesApplicationImpl) app).setDeploymentMetadata(oldMetadata);
+        }
+        
+        throw ue;
+      }
+    } else {
+      return null;
+    }
+  }
 }

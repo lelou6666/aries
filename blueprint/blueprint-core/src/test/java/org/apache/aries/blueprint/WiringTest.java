@@ -18,23 +18,36 @@
  */
 package org.apache.aries.blueprint;
 
+import java.lang.reflect.Constructor;
 import java.math.BigInteger;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
+import java.util.TimeZone;
 
 import junit.framework.Assert;
 
 import org.apache.aries.blueprint.CallbackTracker.Callback;
+import org.apache.aries.blueprint.container.AggregateConverter;
 import org.apache.aries.blueprint.container.BlueprintRepository;
+import org.apache.aries.blueprint.container.GenericType;
+import org.apache.aries.blueprint.container.ServiceRecipe;
 import org.apache.aries.blueprint.di.CircularDependencyException;
+import org.apache.aries.blueprint.di.ExecutionContext;
+import org.apache.aries.blueprint.di.MapRecipe;
+import org.apache.aries.blueprint.di.Recipe;
 import org.apache.aries.blueprint.di.Repository;
-import org.apache.aries.blueprint.namespace.ComponentDefinitionRegistryImpl;
+import org.apache.aries.blueprint.parser.ComponentDefinitionRegistryImpl;
+import org.apache.aries.blueprint.pojos.AmbiguousPojo;
 import org.apache.aries.blueprint.pojos.BeanD;
 import org.apache.aries.blueprint.pojos.BeanF;
 import org.apache.aries.blueprint.pojos.FITestBean;
@@ -42,9 +55,14 @@ import org.apache.aries.blueprint.pojos.Multiple;
 import org.apache.aries.blueprint.pojos.PojoA;
 import org.apache.aries.blueprint.pojos.PojoB;
 import org.apache.aries.blueprint.pojos.PojoGenerics;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.MyClass;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.MyObject;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.Tata;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.Toto;
 import org.apache.aries.blueprint.pojos.PojoListener;
 import org.apache.aries.blueprint.pojos.PojoRecursive;
 import org.apache.aries.blueprint.pojos.Primavera;
+import org.apache.aries.blueprint.proxy.ProxyUtils;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.blueprint.container.ComponentDefinitionException;
 
@@ -89,7 +107,7 @@ public class WiringTest extends AbstractBlueprintTest {
         
         assertNotNull(pojoa.getSet());
         assertTrue(pojoa.getSet().contains("set value"));
-        assertTrue(pojoa.getSet().contains(pojob));
+        assertTrue(pojoa.getSet().contains(pojob.getUri()));
         assertTrue(pojoa.getSet().contains(URI.create("http://geronimo.apache.org")));
         
         assertNotNull(pojoa.getMap());
@@ -125,6 +143,17 @@ public class WiringTest extends AbstractBlueprintTest {
         Object obj3 = repository.create("service1");
         assertNotNull(obj3);
         assertTrue(obj3 instanceof ServiceRegistration);    
+
+        ExecutionContext.Holder.setContext((ExecutionContext) repository);
+        for(Recipe r : ((ServiceRecipe)repository.getRecipe("service1")).getDependencies()) {
+        	if(r instanceof MapRecipe) {
+        		Map m = (Map) r.create();
+        		assertEquals("value1", m.get("key1"));
+        		assertEquals("value2", m.get("key2"));
+        		assertTrue(m.get("key3") instanceof List);
+        	}
+        }
+        ExecutionContext.Holder.setContext(null);
         
         // tests 'prototype' scope
         Object obj4 = repository.create("pojoC");
@@ -136,6 +165,19 @@ public class WiringTest extends AbstractBlueprintTest {
         
         // test destroy-method
         assertEquals(true, pojob.getDestroyCalled());
+    }
+    
+    public void testSetterDisambiguation() throws Exception {
+        ComponentDefinitionRegistryImpl registry = parse("/test-wiring.xml");
+        Repository repository = new TestBlueprintContainer(registry).getRepository();
+
+        AmbiguousPojo pojo = (AmbiguousPojo) repository.create("ambiguousViaInt");
+        assertEquals(5, pojo.getSum());
+        
+        pojo = (AmbiguousPojo) repository.create("ambiguousViaList");
+        assertEquals(7, pojo.getSum());
+        
+        
     }
     
     public void testFieldInjection() throws Exception {
@@ -203,7 +245,7 @@ public class WiringTest extends AbstractBlueprintTest {
 
         ComponentDefinitionRegistryImpl registry = parse("/test-depends-on.xml");
         Repository repository = new TestBlueprintContainer(registry).getRepository();
-        Map instances = repository.createAll(Arrays.asList("c", "d", "e"));
+        Map instances = repository.createAll(Arrays.asList("c", "d", "e"), ProxyUtils.asList(Object.class));
         
         List<Callback> callback = CallbackTracker.getCallbacks();
         assertEquals(3, callback.size());
@@ -287,9 +329,42 @@ public class WiringTest extends AbstractBlueprintTest {
         Object obj12 = repository.create("multipleFactoryTypedNull");
         testMultiple(obj12, "hello-boolean", -1, null);
 
-        // TODO: check the below tests when the incoherence between TCK / spec is solved
-//        Object obj13 = graph.create("mapConstruction");
-//        Object obj14 = graph.create("propsConstruction");
+        Object obj13 = repository.create("mapConstruction");
+        Map<String, String> constructionMap = new HashMap<String, String>();
+        constructionMap.put("a", "b");
+        testMultiple(obj13, constructionMap);
+        Object obj14 = repository.create("propsConstruction");
+        Properties constructionProperties = new Properties();
+        constructionProperties.put("a", "b");
+        testMultiple(obj14,  constructionProperties);
+
+        Object obja = repository.create("mapConstructionWithDefaultType");
+        Map<String, Date> mapa = new HashMap<String, Date>();
+        // Months are 0-indexed
+        Calendar calendar = new GregorianCalendar(2012, 0, 6);
+        calendar.setTimeZone(TimeZone.getTimeZone("GMT"));
+        mapa.put("date", new Date(calendar.getTimeInMillis()));
+        testMultiple(obja, mapa);
+
+        Object objc = repository.create("mapConstructionWithTypedEntries");
+        Map mapc = new HashMap();
+        mapc.put("boolean", Boolean.TRUE);
+        mapc.put("double", 1.23);
+        mapc.put("date", new Date(calendar.getTimeInMillis()));
+        testMultiple(objc, mapc);
+
+        Object objb = repository.create("mapConstructionWithNonDefaultTypedEntries");
+        Map mapb = new HashMap();
+        mapb.put("boolean", Boolean.TRUE);
+        mapb.put("double", 3.45);
+        mapb.put("otherdouble", 10.2);
+        testMultiple(objb, mapb);
+  
+        Object objd = repository.create("mapConstructionWithNonDefaultTypedKeys");
+        Map mapd = new HashMap();
+        mapd.put(Boolean.TRUE, "boolean");
+        mapd.put(42.42, "double");
+        testMultiple(objd, mapd);
 
         BeanF obj15 = (BeanF) repository.create("booleanWrapped");
         assertNotNull(obj15.getWrapped());
@@ -317,6 +392,24 @@ public class WiringTest extends AbstractBlueprintTest {
         assertEquals(intValue, ((Multiple)obj).getInt());
         assertEquals(stringValue, ((Multiple)obj).getString());
         assertEquals(integerValue, ((Multiple)obj).getInteger());        
+    }
+
+    private void testMultiple(Object obj, Map map) {
+       assertNotNull(obj);
+       assertTrue(obj instanceof Multiple);
+       assertEquals(map, ((Multiple)obj).getMap());
+   }
+
+    private void testMultiple(Object obj, Properties map) {
+       assertNotNull(obj);
+       assertTrue(obj instanceof Multiple);
+       assertEquals(map, ((Multiple)obj).getProperties());
+   }
+
+    public void testGenerics2() throws Exception {
+        ComponentDefinitionRegistryImpl registry = parse("/test-generics.xml");
+        Repository repository = new TestBlueprintContainer(registry).getRepository();
+        repository.create("gen2");
     }
 
     public void testGenerics() throws Exception {

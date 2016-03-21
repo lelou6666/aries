@@ -32,14 +32,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.BundleEvent;
 import org.osgi.framework.ServiceReference;
-import org.osgi.framework.SynchronousBundleListener;
 import org.osgi.service.blueprint.container.BlueprintEvent;
 import org.osgi.service.blueprint.container.BlueprintListener;
 import org.osgi.service.blueprint.container.EventConstants;
@@ -51,6 +50,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.aries.blueprint.utils.JavaUtils;
+import org.apache.aries.blueprint.utils.threading.ScheduledExecutorServiceWrapper;
+import org.apache.aries.blueprint.utils.threading.ScheduledExecutorServiceWrapper.ScheduledExecutorServiceFactory;
 
 /**
  * The delivery of {@link BlueprintEvent}s is complicated.  The blueprint extender and its containers use this class to
@@ -58,13 +59,13 @@ import org.apache.aries.blueprint.utils.JavaUtils;
  *
  * @version $Rev$, $Date$
  */
-class BlueprintEventDispatcher implements BlueprintListener, SynchronousBundleListener {
+class BlueprintEventDispatcher implements BlueprintListener {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BlueprintEventDispatcher.class);
 
     private final Set<BlueprintListener> listeners = new CopyOnWriteArraySet<BlueprintListener>();
     private final Map<Bundle, BlueprintEvent> states = new ConcurrentHashMap<Bundle, BlueprintEvent>();
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(new BlueprintThreadFactory("Blueprint Event Dispatcher"));
+    private final ExecutorService executor;
     private final ExecutorService sharedExecutor;
     private final EventAdminListener eventAdminListener;
     private final ServiceTracker containerListenerTracker;
@@ -73,10 +74,18 @@ class BlueprintEventDispatcher implements BlueprintListener, SynchronousBundleLi
 
         assert bundleContext != null;
         assert sharedExecutor != null;
+        
+        executor = new ScheduledExecutorServiceWrapper(bundleContext, "Blueprint Event Dispatcher", new ScheduledExecutorServiceFactory() {
+          
+          public ScheduledExecutorService create(String name)
+          {
+            return Executors.newScheduledThreadPool(1, new BlueprintThreadFactory(name));
+          }
+        });
 
+//        executor = Executors.newSingleThreadExecutor(new BlueprintThreadFactory("Blueprint Event Dispatcher"));
+        
         this.sharedExecutor = sharedExecutor;
-
-        bundleContext.addBundleListener(this);
 
         EventAdminListener listener = null;
         try {
@@ -124,7 +133,7 @@ class BlueprintEventDispatcher implements BlueprintListener, SynchronousBundleLi
 
     public void blueprintEvent(final BlueprintEvent event) {
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Sending blueprint container event {} for bundle {}", toString(event), event.getBundle().getSymbolicName());
+            LOGGER.debug("Sending blueprint container event {} for bundle {}/{}", toString(event), event.getBundle().getSymbolicName(), event.getBundle().getVersion());
         }
 
         synchronized (listeners) {
@@ -220,10 +229,8 @@ class BlueprintEventDispatcher implements BlueprintListener, SynchronousBundleLi
         }
     }
 
-    public void bundleChanged(BundleEvent event) {
-        if (BundleEvent.STOPPING == event.getType()) {
-            states.remove(event.getBundle());
-        }
+    public void removeBlueprintBundle(Bundle bundle) {
+        states.remove(bundle);
     }
 
     private static class EventAdminListener implements BlueprintListener {

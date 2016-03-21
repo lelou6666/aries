@@ -18,80 +18,46 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>org.apache.aries</groupId>
-        <artifactId>java5-parent</artifactId>
-        <version>0.1-incubating-SNAPSHOT</version>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../parent/pom.xml</relativePath>
     </parent>
 
     <groupId>org.apache.aries.spifly</groupId>
-    <artifactId>org.apache.aries.spifly</artifactId>
-    <packaging>bundle</packaging>
-    <name>Apache Aries SPI Fly</name> 
+    <artifactId>spifly</artifactId>
+    <name>Apache Aries SPI Fly</name>
+    <version>1.0.9-SNAPSHOT</version>
+    <packaging>pom</packaging>
     <description>
-This bundle contains an extender that facilitates the use
-of JRE SPI providers (components typically plugged in to the 
-JRE through META-INF/services resources).
+        SPI support for OSGi
     </description>
-    
+
     <scm>
+<<<<<<< HEAD
         <connection>scm:svn:http://svn.apache.org/repos/asf/incubator/aries/branches/0.1-incubating-RCx/spi-fly</connection>
         <developerConnection>scm:svn:https://svn.apache.org/repos/asf/incubator/aries/branches/0.1-incubating-RCx/spi-fly</developerConnection>
         <url>http://svn.apache.org/viewvc/incubator/aries/branches/0.1-incubating-RCx/spi-fly</url>
+=======
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/spi-fly</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/spi-fly</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/spi-fly</url>
+>>>>>>> refs/remotes/apache/trunk
     </scm>
-    <dependencies>
-        <dependency>
-            <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.core</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.compendium</artifactId>
-            <scope>provided</scope>
-        </dependency>
 
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.easymock</groupId>
-            <artifactId>easymock</artifactId>
-            <version>2.5.2</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.easymock</groupId>
-            <artifactId>easymockclassextension</artifactId>
-            <version>2.5.2</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+    <modules>
+        <module>spi-fly-core</module>
+        <module>spi-fly-weaver</module>
+        <module>spi-fly-dynamic-bundle</module>
+        <module>spi-fly-static-tool</module>
+        <module>spi-fly-static-bundle</module>
+        <!--
+        <module>spi-fly-examples</module>
+        -->
+    </modules>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.felix</groupId>
-                <artifactId>maven-bundle-plugin</artifactId>
-                <configuration>
-                    <instructions>
-                        <Import-Package>
-                            *
-                        </Import-Package>
-                        <Export-Package></Export-Package>
-                        <Private-Package>
-                            org.apache.aries.spifly
-                        </Private-Package>
-                        <Bundle-SymbolicName>${pom.artifactId}</Bundle-SymbolicName>
-                        <Bundle-Activator>org.apache.aries.spifly.Activator</Bundle-Activator>
-                    </instructions>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 </project>
-
-

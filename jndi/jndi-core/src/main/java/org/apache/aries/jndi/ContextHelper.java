@@ -18,7 +18,11 @@
  */
 package org.apache.aries.jndi;
 
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.Hashtable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.naming.Context;
 import javax.naming.NamingException;
@@ -27,226 +31,227 @@ import javax.naming.spi.InitialContextFactory;
 import javax.naming.spi.InitialContextFactoryBuilder;
 import javax.naming.spi.ObjectFactory;
 
+import org.apache.aries.jndi.startup.Activator;
+import org.apache.aries.jndi.tracker.ServiceTrackerCustomizers;
+import org.apache.aries.jndi.urls.URLObjectFactoryFinder;
+import org.apache.aries.util.service.registry.ServicePair;
+import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.InvalidSyntaxException;
+import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 
 /**
  * Provides helper methods for the DelegateContext. This provides the methods so
  * there can be many DelegateContexts, but few service trackers.
  */
-public final class ContextHelper
-{
-	/** The bundle context we use for accessing the SR */
-  private static BundleContext context;
-  
-  /** Ensure no one constructs us */
-  private ContextHelper() { throw new RuntimeException(); }
-  
-  public static void setBundleContext(BundleContext ctx)
-  {
-  	context = ctx;
-  }
-  
-  /**
-   * This class creates a Context from an InitialContextFactory that may be
-   * named in the provided env. If no name is set the first InitialContextFactory
-   * returned from the service registry is used.
-   * 
-   * @param env
-   * @return the context.
-   * @throws NamingException
-   */
-  public static Context createContext(Hashtable<?,?> env)
-    throws NamingException
-  {
-  	
-    InitialContextFactory icf = null;
-    ServiceReference ref = null;
+public final class ContextHelper {
 
-    String icfFactory = (String) env.get(Context.INITIAL_CONTEXT_FACTORY);
-    
-    boolean icfFactorySet = true;
-
-    if (icfFactory == null) {
-      icfFactory = InitialContextFactory.class.getName();
-      icfFactorySet = false;
+    /** Ensure no one constructs us */
+    private ContextHelper() {
+        throw new RuntimeException();
     }
-    
-    try {
-      ServiceReference[] refs = context.getAllServiceReferences(icfFactory, null);
-      if (refs != null) {
-        ref = refs[0];
-        icf = (InitialContextFactory) context.getService(ref);
-      }
-    } catch (InvalidSyntaxException e) {
-      // TODO nls enable this.
-      NamingException e4 = new NamingException("Argh this should never happen :)");
-      e4.initCause(e);
+
+    /**
+     * This method is used to create a URL Context. It does this by looking for
+     * the URL context's ObjectFactory in the service registry.
+     * 
+     * @param context
+     * @param urlScheme
+     * @param env
+     * @return a Context
+     * @throws NamingException
+     */
+    public static ContextProvider createURLContext(final BundleContext context,
+                                           final String urlScheme, 
+                                           final Hashtable<?, ?> env)
+        throws NamingException {
       
-      throw e4;
-    }
-
-    if (icf == null) {
-      try {
-        ServiceReference[] refs = context.getAllServiceReferences(InitialContextFactoryBuilder.class.getName(), null);
-
-        if (refs != null) {
-          for (ServiceReference icfbRef : refs) {
-            InitialContextFactoryBuilder builder = (InitialContextFactoryBuilder) context.getService(icfbRef);
-
-            icf = builder.createInitialContextFactory(env);
+        ServicePair<ObjectFactory> urlObjectFactory = getURLObjectFactory(context, urlScheme, env);
+        
+        if (urlObjectFactory != null) {
+            ObjectFactory factory = urlObjectFactory.get();
             
-            context.ungetService(icfbRef);
-            if (icf != null) {
-              break;
+            if (factory != null) {
+                return new URLContextProvider(context, urlObjectFactory.getReference(), factory, env);
+            }
+        }
+
+        // if we got here then we couldn't find a URL context factory so return null.
+        return null;
+    }
+    
+    public static final ServicePair<ObjectFactory> getURLObjectFactory(final BundleContext ctx, String urlScheme, Hashtable<?, ?> environment)
+      throws NamingException
+    {
+      ServicePair<ObjectFactory> result = null;
+      
+      ServiceReference ref = ServiceTrackerCustomizers.URL_FACTORY_CACHE.find(urlScheme);
+      
+      if (ref == null) {
+        ServiceReference[] refs = AccessController.doPrivileged(new PrivilegedAction<ServiceReference[]>() {
+            public ServiceReference[] run() {
+                return Activator.getURLObectFactoryFinderServices();
+            }
+        });        
+        
+        if (refs != null) {
+          for (final ServiceReference finderRef : refs) {
+            URLObjectFactoryFinder finder = (URLObjectFactoryFinder) Utils.getServicePrivileged(ctx, finderRef);
+                
+            if (finder != null) {
+              ObjectFactory f = finder.findFactory(urlScheme, environment);
+              
+              if (f != null) {
+                result = new ServicePair<ObjectFactory>(ctx, finderRef, f);
+                break;
+              } else {
+                ctx.ungetService(finderRef);
+              }
             }
           }
         }
-      } catch (InvalidSyntaxException e) {
-        // TODO nls enable this.
-        NamingException e4 = new NamingException("Argh this should never happen :)");
-        e4.initCause(e);    
-        throw e4;
+      } else {
+        result = new ServicePair<ObjectFactory>(ctx, ref);
       }
-    }
-
-    if (icf == null && icfFactorySet) {
-      try {
-        Class<?> clazz = Class.forName(icfFactory, true, null);
-        icf = (InitialContextFactory) clazz.newInstance();
-      } catch (ClassNotFoundException e11) {
-        // TODO nls enable this.
-        NamingException e = new NamingException("Argh this should never happen :)");
-        e.initCause(e11);    
-        throw e;
-      } catch (InstantiationException e2) {
-        // TODO nls enable this.
-        NamingException e4 = new NamingException("Argh this should never happen :)");
-        e4.initCause(e2);    
-        throw e4;
-      } catch (IllegalAccessException e1) {
-        // TODO nls enable this.
-        NamingException e4 = new NamingException("Argh this should never happen :)");
-        e4.initCause(e1);    
-        throw e4;
-      }
-    }
-
-    if (icf == null) {
-
-      // TODO nls enable this.
-      NamingException e3 = new NoInitialContextException("We could not find an InitialContextFactory to use");
       
-      throw e3;
+      return result;
     }
-
-    Context ctx = icf.getInitialContext(env);
-
-    if (ref != null) context.ungetService(ref);
-
-    if (ctx == null) {
-      // TODO nls enable this
-      NamingException e = new NamingException("The ICF returned a null context");
-      throw e;
-    }
-
-    return ctx;
-  }
-  
-  
-  private static Context createIcfContext(Hashtable<?,?> env) throws NamingException
-  {
-    String icfFactory = (String) env.get(Context.INITIAL_CONTEXT_FACTORY);
-    InitialContextFactory icf = null;
-
-    if (icfFactory != null) {
-      try {
-        Class<?> clazz = Class.forName(icfFactory, true, Thread.currentThread()
-            .getContextClassLoader());
-        icf = (InitialContextFactory) clazz.newInstance();
-
-      } catch (ClassNotFoundException e11) {
-        NamingException e4 = new NamingException("Argh this should never happen :)");
-        e4.initCause(e11);
-        throw e4;
-      } catch (InstantiationException e2) {
-        NamingException e4 = new NamingException("Argh this should never happen :)");
-        e4.initCause(e2);
-        throw e4;
-      } catch (IllegalAccessException e1) {
-        NamingException e4 = new NamingException("Argh this should never happen :)");
-        e4.initCause(e1);
-        throw e4;
+        
+    public static Context getInitialContext(BundleContext context, Hashtable<?, ?> environment)
+        throws NamingException {
+      
+      final Bundle jndiBundle = FrameworkUtil.getBundle(ContextHelper.class);
+      // if we are outside OSGi (like in our unittests) then we would get Null back here, so just make sure we don't.
+      if (jndiBundle != null) {
+        
+        BundleContext jndiBundleContext = AccessController.doPrivileged(new PrivilegedAction<BundleContext>() {
+          public BundleContext run()
+          {
+            return jndiBundle.getBundleContext();
+          }
+        });
+        
+        if (!!!jndiBundleContext.getClass().equals(context.getClass())){
+          //the context passed in must have come from a child framework
+          //use the parent context instead
+          context = jndiBundleContext;
+        }
       }
-    }
-    Context ctx = null;
-
-    if (icf != null) {
-      ctx = icf.getInitialContext(env);
-    }    
-    
-    return ctx;
-  }
-  
-  /**
-   * This method is used to create a URL Context. It does this by looking for 
-   * the URL context's ObjectFactory in the service registry.
-   * 
-   * @param urlScheme
-   * @param env
-   * @return a Context
-   * @throws NamingException
-   */
-  public static Context createURLContext(String urlScheme, Hashtable<?, ?> env)
-      throws NamingException
-  {
-    ObjectFactory factory = null;
-    ServiceReference ref = null;
-
-    Context ctx = null;
-
-    try {
-      ServiceReference[] services = context.getServiceReferences(ObjectFactory.class.getName(),
-          "(|(osgi.jndi.urlScheme=" + urlScheme + ")(urlScheme=" + urlScheme + "))");
-
-      if (services != null) {
-        ref = services[0];
-        factory = (ObjectFactory) context.getService(ref);
-      }
-    } catch (InvalidSyntaxException e1) {
-      // TODO nls enable this.
-      NamingException e = new NamingException("Argh this should never happen :)");
-      e.initCause(e1);
-      throw e;
-    }
-
-    if (factory != null) {
-      try {
-        ctx = (Context) factory.getObjectInstance(null, null, null, env);
-      } catch (Exception e) {
-        NamingException e2 = new NamingException();
-        e2.initCause(e);
-        throw e2;
-      } finally {
-        if (ref != null) context.ungetService(ref);
-      }
-    }
-
-    // TODO: This works for WAS - we believe - but is incorrect behaviour. We should not use an icf to generate the URLContext.
-    // Rather, the missing URLContext factories should be exported on behalf of WAS.
-    if (ctx == null) {
-      ctx = createIcfContext(env);
+      
+        ContextProvider provider = getContextProvider(context, environment);
+        
+        if (provider != null) {
+          return new DelegateContext(context, provider);
+        } else {
+          String contextFactoryClass = (String) environment.get(Context.INITIAL_CONTEXT_FACTORY);
+          if (contextFactoryClass == null) {
+            return new DelegateContext(context, environment);
+          } else {
+            throw new NoInitialContextException(Utils.MESSAGES.getMessage("no.initial.context.factory", contextFactoryClass));
+          }
+        }
     }
     
-    if (ctx == null && factory == null) {
-      NamingException e = new NamingException("We could not find an ObjectFactory to use");
-      throw e;
-    } else if (ctx == null && factory != null) {
-      NamingException e = new NamingException("The ICF returned a null context");
-      throw e;
+    public static ContextProvider getContextProvider(BundleContext context,
+                                                     Hashtable<?, ?> environment)
+        throws NamingException {
+        
+        ContextProvider provider = null;
+        String contextFactoryClass = (String) environment.get(Context.INITIAL_CONTEXT_FACTORY);
+        if (contextFactoryClass == null) {
+            // 1. get ContextFactory using builder
+            provider = getInitialContextUsingBuilder(context, environment);
+
+            // 2. lookup all ContextFactory services
+            if (provider == null) {
+                
+                ServiceReference[] references = AccessController.doPrivileged(new PrivilegedAction<ServiceReference[]>() {
+                    public ServiceReference[] run() {
+                        return Activator.getInitialContextFactoryServices();
+                    }
+                });
+                
+                if (references != null) {
+                    Context initialContext = null;
+                    for (ServiceReference reference : references) {
+                        InitialContextFactory factory = (InitialContextFactory) Utils.getServicePrivileged(context, reference);
+                        try {
+                            initialContext = factory.getInitialContext(environment);
+                            if (initialContext != null) {
+                              provider = new SingleContextProvider(context, reference, initialContext);
+                              break;
+                          }
+                        } finally {
+                            if (provider == null) context.ungetService(reference);
+                        }
+                    }
+                }
+            }
+        } else {
+            ServiceReference ref = ServiceTrackerCustomizers.ICF_CACHE.find(contextFactoryClass);
+            
+            if (ref != null) {
+              Context initialContext = null;
+              InitialContextFactory factory = (InitialContextFactory) Utils.getServicePrivileged(context, ref);
+              if (factory != null) {
+                try {
+                    initialContext = factory.getInitialContext(environment);
+                    provider = new SingleContextProvider(context, ref, initialContext);
+                } finally {
+                    if (provider == null) context.ungetService(ref);
+                }
+              }
+            }
+            
+            // 2. get ContextFactory using builder
+            if (provider == null) {
+                provider = getInitialContextUsingBuilder(context, environment);
+            }
+        }
+        
+        return provider;
     }
 
-    return ctx;
-  }
+    private static final Logger logger = Logger.getLogger(ContextHelper.class.getName());
+    
+    private static ContextProvider getInitialContextUsingBuilder(BundleContext context,
+                                                                 Hashtable<?, ?> environment)
+            throws NamingException {
+        
+        ContextProvider provider = null;
+        ServiceReference[] refs = AccessController.doPrivileged(new PrivilegedAction<ServiceReference[]>() {
+            public ServiceReference[] run() {
+                return Activator.getInitialContextFactoryBuilderServices();
+            }            
+        });
+            
+        if (refs != null) {
+            InitialContextFactory factory = null;
+            for (ServiceReference ref : refs) {                    
+                InitialContextFactoryBuilder builder = (InitialContextFactoryBuilder) Utils.getServicePrivileged(context, ref);
+                try {
+                  factory = builder.createInitialContextFactory(environment);
+                } catch (NamingException ne) {
+                  // TODO: log
+                  // ignore this, if the builder fails we want to move onto the next one
+                } catch (NullPointerException npe) { 
+                	logger.log(Level.SEVERE,  "NPE caught in ContextHelper.getInitialContextUsingBuilder. context=" + context + " ref=" + ref);
+                	throw npe;
+                }
+                
+                if (factory != null) {
+                  try {
+                    provider = new SingleContextProvider(context, ref, factory.getInitialContext(environment));
+                  } finally {
+                    if (provider == null) context.ungetService(ref); // we didn't get something back, so this was no good.
+                  }
+                  break;
+                } else {
+                  context.ungetService(ref); // we didn't get something back, so this was no good.
+                }
+            }
+        }
+        return provider;
+    }
+
 }

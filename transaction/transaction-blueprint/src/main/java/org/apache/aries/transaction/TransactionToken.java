@@ -20,34 +20,33 @@ package org.apache.aries.transaction;
 
 import javax.transaction.Transaction;
 
-class TransactionToken
+import org.osgi.service.coordinator.Coordination;
+
+public class TransactionToken
 {
    private Transaction activeTransaction;
    private Transaction suspendedTransaction;
-   private TransactionStrategy transactionStrategy;
+   private TransactionAttribute transactionAttribute;
    private boolean isCompletionAllowed;
+   private Coordination coordination;
    
    public TransactionToken(Transaction activeTransaction, Transaction suspendedTransaction,
-        TransactionStrategy transactionStrategy)
+           TransactionAttribute transactionAttribute)
    {
-    this(activeTransaction, suspendedTransaction, transactionStrategy, false);
+    this(activeTransaction, suspendedTransaction, transactionAttribute, false);
    }
 
    TransactionToken(Transaction activeTransaction, Transaction suspendedTransaction,
-           TransactionStrategy transactionStrategy, boolean isCompletionAllowed)
+           TransactionAttribute transactionAttribute, boolean isCompletionAllowed)
    {
        this.activeTransaction = activeTransaction;
        this.suspendedTransaction = suspendedTransaction;
-       this.transactionStrategy = transactionStrategy;
+       this.transactionAttribute = transactionAttribute;
        this.isCompletionAllowed = isCompletionAllowed;
    }
 
    public Transaction getActiveTransaction() {
        return activeTransaction;
-   }
-
-   public void setActiveTransaction(Transaction activeTransaction) {
-       this.activeTransaction = activeTransaction;
    }
 
    public Transaction getSuspendedTransaction() {
@@ -58,19 +57,23 @@ class TransactionToken
        this.suspendedTransaction = suspendedTransaction;
    }
 
-   public TransactionStrategy getTransactionStrategy() {
-       return transactionStrategy;
+   public TransactionAttribute getTransactionAttribute() {
+       return transactionAttribute;
    }
 
-   public void setTransactionStrategy(TransactionStrategy transactionStrategy) {
-       this.transactionStrategy = transactionStrategy;
+   public void setTransactionStrategy(TransactionAttribute transactionAttribute) {
+       this.transactionAttribute = transactionAttribute;
    }
 
    public boolean isCompletionAllowed() {
        return isCompletionAllowed;
    }
-
-   public void setCompletionAllowed(boolean isCompletionAllowed) {
-       this.isCompletionAllowed = isCompletionAllowed;
+   
+   public Coordination getCoordination() {
+    return coordination;
+   }
+   
+   public void setCoordination(Coordination coordination) {
+    this.coordination = coordination;
    }
 }

@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -17,43 +18,105 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <parent>
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../../parent/pom.xml</relativePath>
+    </parent>
+
     <groupId>org.apache.aries.jndi</groupId>
-    <artifactId>jndi</artifactId>
-    <version>0.2-incubating-SNAPSHOT</version>
-  </parent>
-
-  <artifactId>org.apache.aries.jndi.core</artifactId>
-  <packaging>bundle</packaging>
-  <name>Apache Aries JNDI Core</name>
-  <description>
+    <artifactId>org.apache.aries.jndi.core</artifactId>
+    <packaging>bundle</packaging>
+    <name>Apache Aries JNDI Core</name>
+    <version>1.0.3-SNAPSHOT</version>
+    <description>
       This bundle contains the core of JNDI support for OSGi.
-  </description>
+    </description>
 
-  <properties>
-    <aries.osgi.export.pkg>
-      org.apache.aries.jndi
-    </aries.osgi.export.pkg>
-    <aries.osgi.private.pkg>
-      org.apache.aries.jndi.startup
-    </aries.osgi.private.pkg>
-    <aries.osgi.activator>
-      org.apache.aries.jndi.startup.Activator
-    </aries.osgi.activator>
-  </properties>
-  
-  <dependencies>
-      <dependency>
-          <groupId>org.osgi</groupId>
-          <artifactId>org.osgi.core</artifactId>
-          <scope>provided</scope>
-      </dependency>
-      <dependency>
-          <groupId>org.apache.aries.testsupport</groupId>
-          <artifactId>org.apache.aries.testsupport.unit</artifactId>
-          <scope>test</scope>
-      </dependency>
-  </dependencies>
+    <scm>
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/jndi/jndi-core</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/jndi/jndi-core</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/jndi/jndi-core</url>
+    </scm>
+
+    <properties>
+        <aries.osgi.private.pkg>
+            org.apache.aries.jndi,
+            org.apache.aries.jndi.startup,
+            org.apache.aries.jndi.tracker
+        </aries.osgi.private.pkg>
+        <aries.osgi.activator>
+            org.apache.aries.jndi.startup.Activator
+        </aries.osgi.activator>
+        <aries.osgi.export.pkg />
+        <lastReleaseVersion>1.0.0</lastReleaseVersion>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.aries.jndi</groupId>
+            <artifactId>org.apache.aries.jndi.api</artifactId>
+            <scope>provided</scope>
+            <version>1.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.osgi</groupId>
+            <artifactId>org.osgi.core</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.osgi</groupId>
+            <artifactId>org.osgi.compendium</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries.testsupport</groupId>
+            <artifactId>org.apache.aries.testsupport.unit</artifactId>
+            <scope>test</scope>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries</groupId>
+            <artifactId>org.apache.aries.util</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+    </dependencies>
+
+     <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.aries.versioning</groupId>
+                <artifactId>org.apache.aries.versioning.plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-verify</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>version-check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

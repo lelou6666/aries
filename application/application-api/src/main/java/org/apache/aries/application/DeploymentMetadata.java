@@ -22,8 +22,11 @@ package org.apache.aries.application;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
+import org.osgi.framework.Filter;
 import org.osgi.framework.Version;
 
 /**
@@ -52,10 +55,34 @@ public interface DeploymentMetadata {
   
   /**
    * get the value of the Provision-Bundle header
-   * @return
+   * @return the list of non-app bundles to provision.
    */
   public List<DeploymentContent> getApplicationProvisionBundles();
+  
+  /**
+   * get the value of Deployed-UseBundle header
+   * 
+   * @return the list of bundles to use from the deployment.
+   */
+  public Collection<DeploymentContent> getDeployedUseBundle();
+  
+  /**
+   * get the value of Import-Package
+   * @return all the packages to import from non-app content.
+   */
+  public Collection<Content> getImportPackage();
 
+  /**
+   * Get the list of DeployedService-Import
+   * @return DeployedService-Import
+   */
+  public Collection<Filter> getDeployedServiceImport();
+  
+  /**
+   * get the contents of deployment manifest in a map
+   * @return    the required feature map
+   */
+  public Map<String, String> getHeaders();
   /**
    * Obtain the associated 
    * {@link org.apache.aries.application.ApplicationMetadata ApplicationMetadata}. 

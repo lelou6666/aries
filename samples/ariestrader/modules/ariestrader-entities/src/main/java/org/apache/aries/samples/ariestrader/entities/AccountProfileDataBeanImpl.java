@@ -43,22 +43,22 @@ import org.apache.aries.samples.ariestrader.api.persistence.AccountProfileDataBe
 public class AccountProfileDataBeanImpl implements AccountProfileDataBean, java.io.Serializable {
 
 	@Id
-    @Column(name = "USERID", nullable = false)
+    @Column(name = "USERID", nullable = false, length = 255)
     private String userID;              /* userID */
     
-	@Column(name = "PASSWD")
+	@Column(name = "PASSWD", length = 255)
     private String passwd;              /* password */
     
-	@Column(name = "FULLNAME")
+	@Column(name = "FULLNAME", length = 255)
     private String fullName;            /* fullName */
     
-	@Column(name = "ADDRESS")
+	@Column(name = "ADDRESS", length = 255)
     private String address;             /* address */
     
-	@Column(name = "email")
+	@Column(name = "email", length = 255)
     private String email;               /* email */
     
-	@Column(name = "creditcard")
+	@Column(name = "creditcard", length = 255)
 	//why was it credit?
     private String creditCard;          /* creditCard */
     

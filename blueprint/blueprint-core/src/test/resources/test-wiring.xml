@@ -20,15 +20,18 @@
            default-availability="mandatory" >
 
     <type-converters>
-            <bean id="converter1" class="org.apache.aries.blueprint.pojos.ConverterA">
-                <property name="bundle" ref="blueprintBundleContext" />
-            </bean>
+            <bean id="converter1" class="org.apache.aries.blueprint.pojos.ConverterA"/>
     </type-converters>
 
+    <reference id="aReference" interface="java.util.List"/>
+    
     <service id="service1" ref="pojoB" interface="org.apache.aries.blueprint.pojos.PojoB">
         <service-properties>
             <entry key="key1" value="value1"/>
             <entry key="key2" value="value2"/>
+            <entry key="key3">
+                <ref component-id="aReference"/>
+            </entry>
         </service-properties>    
     </service>
 
@@ -130,6 +133,19 @@
     
     <bean id="FIFailureTest2Bean" class="org.apache.aries.blueprint.pojos.FITestBean" ext:field-injection="false">
         <property name="attr" value="value" />
+    </bean>
+    
+    <bean id="ambiguousViaInt" class="org.apache.aries.blueprint.pojos.AmbiguousPojo">
+    	<property name="sum" value="5" />
+    </bean>
+    
+    <bean id="ambiguousViaList" class="org.apache.aries.blueprint.pojos.AmbiguousPojo">
+    	<property name="sum">
+    		<list>
+    			<value>3</value>
+    			<value>4</value>
+    		</list>
+    	</property>
     </bean>
 
 </blueprint>

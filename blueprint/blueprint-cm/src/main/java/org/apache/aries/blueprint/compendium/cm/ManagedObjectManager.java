@@ -18,13 +18,13 @@
  */
 package org.apache.aries.blueprint.compendium.cm;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.apache.aries.util.AriesFrameworkUtil;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.cm.ConfigurationException;
 import org.osgi.service.cm.ManagedService;
@@ -46,7 +46,7 @@ public class ManagedObjectManager {
         ConfigurationWatcher reg = map.get(key);
         if (reg == null) {
             reg = new ConfigurationWatcher(); 
-            ServiceRegistration registration = cm.getBundle().getBundleContext().registerService(ManagedService.class.getName(), reg, props);
+            ServiceRegistration registration = cm.getBundle().getBundleContext().registerService(ManagedService.class.getName(), reg, (Dictionary) props);
             reg.setRegistration(registration);            
             map.put(key, reg);
         }
@@ -60,7 +60,7 @@ public class ManagedObjectManager {
             reg.remove(cm);
             if (reg.isEmpty()) {
                 map.remove(key);
-                reg.getRegistration().unregister();
+                AriesFrameworkUtil.safeUnregisterService(reg.getRegistration());
             }
         }
     }
@@ -68,17 +68,20 @@ public class ManagedObjectManager {
     private static class ConfigurationWatcher implements ManagedService {
 
         private ServiceRegistration registration;
-        private List<ManagedObject> list = Collections.synchronizedList(new ArrayList<ManagedObject>());
+        private List<ManagedObject> list = new CopyOnWriteArrayList<ManagedObject>();
         
         public ConfigurationWatcher() {
         }
         
-        public void updated(Dictionary props) throws ConfigurationException {
-            synchronized (list) {
-                for (ManagedObject cm : list) {
-                    cm.updated(props);
+        public void updated(final Dictionary props) throws ConfigurationException {
+            // Run in a separate thread to avoid re-entrance
+            new Thread() {
+                public void run() {
+                    for (ManagedObject cm : list) {
+                        cm.updated(props);
+                    }
                 }
-            }
+            }.start();
         }
         
         private void setRegistration(ServiceRegistration registration) {

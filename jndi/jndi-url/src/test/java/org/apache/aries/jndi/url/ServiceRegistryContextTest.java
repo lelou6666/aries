@@ -24,10 +24,15 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.Properties;
+import java.util.concurrent.Callable;
 
 import javax.naming.Binding;
 import javax.naming.Context;
@@ -39,11 +44,12 @@ import javax.naming.NamingException;
 import javax.naming.spi.ObjectFactory;
 import javax.sql.DataSource;
 
-import org.apache.aries.jndi.ContextHelper;
-import org.apache.aries.jndi.OSGiObjectFactoryBuilder;
+import org.apache.aries.jndi.api.JNDIConstants;
 import org.apache.aries.mocks.BundleContextMock;
 import org.apache.aries.mocks.BundleMock;
+import org.apache.aries.proxy.ProxyManager;
 import org.apache.aries.unittest.mocks.MethodCall;
+import org.apache.aries.unittest.mocks.MethodCallHandler;
 import org.apache.aries.unittest.mocks.Skeleton;
 import org.junit.After;
 import org.junit.Before;
@@ -80,22 +86,52 @@ public class ServiceRegistryContextTest
   public void registerService() throws NamingException, SecurityException, NoSuchFieldException, IllegalArgumentException, IllegalAccessException 
   {
     bc =  Skeleton.newMock(new BundleContextMock(), BundleContext.class);
-    new Activator().start(bc);
+    registerProxyManager();
     new org.apache.aries.jndi.startup.Activator().start(bc);
-    
-    Field f = ContextHelper.class.getDeclaredField("context");
-    f.setAccessible(true);
-    f.set(null, bc);
-    f = OSGiObjectFactoryBuilder.class.getDeclaredField("context");
-    f.setAccessible(true);
-    f.set(null, bc);
-
-
+    new Activator().start(bc);
+        
     service = Skeleton.newMock(Runnable.class);
     
     registerService(service);
   }
   
+  private void registerProxyManager() 
+  {
+    ProxyManager mgr = Skeleton.newMock(ProxyManager.class);
+    
+    //   public Object createDelegatingProxy(Bundle clientBundle, Collection<Class<?>> classes, Callable<Object> dispatcher, Object template) throws UnableToProxyException;
+
+    Skeleton.getSkeleton(mgr).registerMethodCallHandler(new MethodCall(ProxyManager.class, "createDelegatingProxy", Bundle.class, Collection.class, Callable.class, Object.class),
+        new MethodCallHandler() 
+        {
+          public Object handle(MethodCall methodCall, Skeleton skeleton) throws Exception 
+          {
+            @SuppressWarnings("unchecked")
+            Collection<Class<?>> interfaceClasses = (Collection<Class<?>>) methodCall.getArguments()[1];
+            Class<?>[] classes = new Class<?>[interfaceClasses.size()];
+            
+            Iterator<Class<?>> it = interfaceClasses.iterator(); 
+            for (int i = 0; it.hasNext(); i++) {
+              classes[i] = it.next();
+            }
+            
+            @SuppressWarnings("unchecked")
+            final Callable<Object> target = (Callable<Object>) methodCall.getArguments()[2];
+            
+            return Proxy.newProxyInstance(this.getClass().getClassLoader(), classes, new InvocationHandler() 
+            {
+              public Object invoke(Object mock, Method method, Object[] arguments)
+                  throws Throwable 
+              {
+                return method.invoke(target.call(), arguments);
+              }
+            });
+          }
+        });
+    
+    bc.registerService(ProxyManager.class.getName(), mgr, null);
+  }
+
   /**
    * Register a service in our map.
    * 
@@ -136,9 +172,44 @@ public class ServiceRegistryContextTest
      
      Context ctx2 = (Context) ctx.lookup("osgi:service");
      
-     Runnable r = (Runnable) ctx2.lookup("java.lang.Runnable");
+     Runnable r1 = (Runnable) ctx2.lookup("java.lang.Runnable");   
+     assertNotNull(r1);
+     assertTrue("expected proxied service class", r1 != service);
      
-     assertNotNull(r);
+     Runnable r2 = (Runnable) ctx.lookup("aries:services/java.lang.Runnable");
+     assertNotNull(r2);
+     assertTrue("expected non-proxied service class", r2 == service);
+  }
+  
+  @Test
+  public void testLookupWithPause() throws NamingException
+  {
+     BundleMock mock = new BundleMock("scooby.doo", new Properties());
+        
+     Thread.currentThread().setContextClassLoader(mock.getClassLoader());
+
+     Hashtable<Object, Object> env = new Hashtable<Object, Object>();
+     env.put(JNDIConstants.REBIND_TIMEOUT, 1000);
+     
+     InitialContext ctx = new InitialContext(env);
+     
+     Context ctx2 = (Context) ctx.lookup("osgi:service");
+     
+     Runnable r1 = (Runnable) ctx2.lookup("java.lang.Runnable");   
+     
+     reg.unregister();
+     
+     long startTime = System.currentTimeMillis();
+     
+     try {
+       r1.run();
+       fail("Should have received an exception");
+     } catch (ServiceException e) {
+       long endTime = System.currentTimeMillis();
+       long diff = endTime - startTime;
+       
+       assertTrue("The run method did not fail in the expected time (1s): " + diff, diff >= 1000);
+     }
   }
   
   /**
@@ -203,11 +274,11 @@ public class ServiceRegistryContextTest
         
     InitialContext ctx = new InitialContext(new Hashtable<Object, Object>());
     
-    BundleMock mock = new BundleMock("scooby.doo", new Properties());
+    BundleMock mock = new BundleMock("scooby.doo.1", new Properties());
     
     Thread.currentThread().setContextClassLoader(mock.getClassLoader());
     
-    Runnable s = (Runnable) ctx.lookup("aries:services/java.lang.Runnable");
+    Runnable s = (Runnable) ctx.lookup("osgi:service/java.lang.Runnable");
     
     assertNotNull("We didn't get a service back from our lookup :(", s);
     
@@ -219,7 +290,9 @@ public class ServiceRegistryContextTest
     
     skel.assertCalled(new MethodCall(BundleContext.class, "getServiceReferences", "java.lang.Runnable", null));
 
-    mock = new BundleMock("scooby.doo", new Properties());
+    ctx = new InitialContext(new Hashtable<Object, Object>());
+    
+    mock = new BundleMock("scooby.doo.2", new Properties());
     
     Thread.currentThread().setContextClassLoader(mock.getClassLoader());
 
@@ -236,7 +309,7 @@ public class ServiceRegistryContextTest
     s.run();
     
     Skeleton.getSkeleton(service).assertCalledExactNumberOfTimes(new MethodCall(Runnable.class, "run"), 2);
-
+       
     skel = Skeleton.getSkeleton(mock.getBundleContext());
     skel.assertCalled(new MethodCall(BundleContext.class, "getServiceReferences", "java.lang.Runnable", null));
   }
@@ -258,7 +331,7 @@ public class ServiceRegistryContextTest
 
     InitialContext ctx = new InitialContext();
     
-    Object s = ctx.lookup("aries:services/java.lang.Runnable/(rubbish=smelly)");
+    Object s = ctx.lookup("osgi:service/java.lang.Runnable/(rubbish=smelly)");
     
     assertNotNull("We didn't get a service back from our lookup :(", s);
     
@@ -286,7 +359,7 @@ public class ServiceRegistryContextTest
 
     InitialContext ctx = new InitialContext();
     
-    ctx.lookup("aries:services/java.lang.Runnable");
+    ctx.lookup("osgi:service/java.lang.Runnable");
   }
   
   /**
@@ -304,7 +377,7 @@ public class ServiceRegistryContextTest
 
     InitialContext ctx = new InitialContext();
     
-    ctx.lookup("aries:services/java.lang.Integer");
+    ctx.lookup("osgi:service/java.lang.Integer");
   }
   
   /**
@@ -317,7 +390,7 @@ public class ServiceRegistryContextTest
   {
     InitialContext ctx = new InitialContext();
     
-    NamingEnumeration<NameClassPair> serviceList = ctx.list("aries:services/java.lang.Runnable/(rubbish=smelly)");
+    NamingEnumeration<NameClassPair> serviceList = ctx.list("osgi:service/java.lang.Runnable/(rubbish=smelly)");
     
     checkThreadRetrievedViaListMethod(serviceList);
     
@@ -327,7 +400,7 @@ public class ServiceRegistryContextTest
     
     registerService(new Thread());
     
-    serviceList = ctx.list("aries:services/java.lang.Runnable/(rubbish=smelly)");
+    serviceList = ctx.list("osgi:service/java.lang.Runnable/(rubbish=smelly)");
     
     checkThreadRetrievedViaListMethod(serviceList);
     
@@ -481,7 +554,7 @@ public class ServiceRegistryContextTest
     Binding bnd = ne.nextElement();
     
     assertEquals(String.valueOf(reg.getReference().getProperty(Constants.SERVICE_ID)), bnd.getName());
-    assertTrue("Class name not correct. Was: " + bnd.getClassName(), bnd.getClassName().contains("Proxy"));
+    assertTrue("Class name not correct. Was: " + bnd.getClassName(), bnd.getClassName().contains("Proxy") || bnd.getClassName().contains("EnhancerByCGLIB"));
     
     Runnable r = (Runnable) bnd.getObject();
     
@@ -497,7 +570,7 @@ public class ServiceRegistryContextTest
     bnd = ne.nextElement();
     
     assertEquals(String.valueOf(reg2.getReference().getProperty(Constants.SERVICE_ID)), bnd.getName());
-    assertTrue("Class name not correct. Was: " + bnd.getClassName(), bnd.getClassName().contains("Proxy"));
+    assertTrue("Class name not correct. Was: " + bnd.getClassName(), bnd.getClassName().contains("Proxy") || bnd.getClassName().contains("EnhancerByCGLIB"));
     
     r = (Runnable) bnd.getObject();
     
@@ -596,7 +669,7 @@ public class ServiceRegistryContextTest
     
     assertEquals("The service retrieved was not of the correct type", "java.lang.Thread", ncp.getClassName());
     
-    assertEquals("aries:services/java.lang.Runnable/(rubbish=smelly)", ncp.getName().toString());
+    assertEquals("osgi:service/java.lang.Runnable/(rubbish=smelly)", ncp.getName().toString());
   }
   
   /**
@@ -609,7 +682,7 @@ public class ServiceRegistryContextTest
   {
     InitialContext ctx = new InitialContext();
     
-    NamingEnumeration<Binding> serviceList = ctx.listBindings("aries:services/java.lang.Runnable/(rubbish=smelly)");
+    NamingEnumeration<Binding> serviceList = ctx.listBindings("osgi:service/java.lang.Runnable/(rubbish=smelly)");
     
     Object returnedService = checkThreadRetrievedViaListBindingsMethod(serviceList);
     
@@ -621,7 +694,7 @@ public class ServiceRegistryContextTest
     Thread secondService = new Thread();
     registerService(secondService);
     
-    serviceList = ctx.listBindings("aries:services/java.lang.Runnable/(rubbish=smelly)");
+    serviceList = ctx.listBindings("osgi:service/java.lang.Runnable/(rubbish=smelly)");
     
     Object returnedService1 = checkThreadRetrievedViaListBindingsMethod(serviceList);
     
@@ -652,7 +725,7 @@ public class ServiceRegistryContextTest
     
     assertTrue("The service retrieved was not of the correct type", binding.getObject() instanceof Thread);
     
-    assertEquals("aries:services/java.lang.Runnable/(rubbish=smelly)", binding.getName().toString());
+    assertEquals("osgi:service/java.lang.Runnable/(rubbish=smelly)", binding.getName().toString());
     
     return binding.getObject();
   }

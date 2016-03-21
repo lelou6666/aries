@@ -22,9 +22,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
-import org.apache.aries.application.filesystem.IDirectory;
-import org.apache.aries.application.filesystem.IFile;
-import org.apache.aries.application.management.BundleConverter;
+import org.apache.aries.application.management.BundleInfo;
+import org.apache.aries.application.management.spi.convert.BundleConversion;
+import org.apache.aries.application.management.spi.convert.BundleConverter;
+import org.apache.aries.application.utils.management.SimpleBundleInfo;
+import org.apache.aries.util.filesystem.IDirectory;
+import org.apache.aries.util.filesystem.IFile;
+import org.apache.aries.util.manifest.BundleManifest;
+import org.apache.aries.web.converter.WabConversion;
 import org.apache.aries.web.converter.WarToWabConverter;
 import org.apache.aries.web.converter.WarToWabConverter.InputStreamProvider;
 import org.slf4j.Logger;
@@ -44,14 +49,26 @@ public class WabConverterService implements BundleConverter {
         this.wabConverter = wabConverter;
     }
 
-    public InputStream convert(IDirectory parentEba, final IFile toBeConverted) {
+    public BundleConversion convert(IDirectory parentEba, final IFile toBeConverted) {
         if (toBeConverted.getName().endsWith(WAR_FILE_EXTENSION)) {
             try {
-                return wabConverter.convert(new InputStreamProvider() {
+            	final WabConversion conversion = wabConverter.convert(new InputStreamProvider() {
                     public InputStream getInputStream() throws IOException {
                         return toBeConverted.open();
                     }
                 }, toBeConverted.getName(), new Properties());
+            	            	
+                return new BundleConversion() {
+
+					public BundleInfo getBundleInfo() throws IOException {
+						return new SimpleBundleInfo(BundleManifest.fromBundle(conversion.getWAB()), toBeConverted.toString());
+					}
+
+					public InputStream getInputStream() throws IOException {
+						return conversion.getWAB();
+					}
+                	
+                };
             } catch (IOException e) {
                 LOGGER.error("Encountered an exception while converting " + toBeConverted.getName() 
                         + " in " + parentEba.getName(), e);

@@ -28,7 +28,10 @@ import java.util.Set;
 
 import org.apache.aries.blueprint.ComponentDefinitionRegistry;
 import org.apache.aries.blueprint.ExtendedBeanMetadata;
-import org.apache.aries.blueprint.ExtendedBlueprintContainer;
+import org.apache.aries.blueprint.ExtendedReferenceMetadata;
+import org.apache.aries.blueprint.ExtendedServiceReferenceMetadata;
+import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
+import org.apache.aries.blueprint.utils.ServiceListener;
 import org.apache.aries.blueprint.PassThroughMetadata;
 import org.apache.aries.blueprint.di.ArrayRecipe;
 import org.apache.aries.blueprint.di.CollectionRecipe;
@@ -44,6 +47,7 @@ import org.apache.aries.blueprint.ext.ComponentFactoryMetadata;
 import org.apache.aries.blueprint.ext.DependentComponentFactoryMetadata;
 import org.apache.aries.blueprint.mutable.MutableMapMetadata;
 import org.apache.aries.blueprint.reflect.MetadataUtil;
+import org.osgi.service.blueprint.container.ComponentDefinitionException;
 import org.osgi.service.blueprint.reflect.BeanArgument;
 import org.osgi.service.blueprint.reflect.BeanMetadata;
 import org.osgi.service.blueprint.reflect.BeanProperty;
@@ -71,11 +75,11 @@ import org.osgi.service.blueprint.reflect.ValueMetadata;
 public class RecipeBuilder {
 
     private final Set<String> names = new HashSet<String>();
-    private final ExtendedBlueprintContainer blueprintContainer;
+    private final BlueprintContainerImpl blueprintContainer;
     private final ComponentDefinitionRegistry registry;
     private final IdSpace recipeIdSpace;
 
-    public RecipeBuilder(ExtendedBlueprintContainer blueprintContainer, IdSpace recipeIdSpace) {
+    public RecipeBuilder(BlueprintContainerImpl blueprintContainer, IdSpace recipeIdSpace) {
         this.recipeIdSpace = recipeIdSpace;
         this.blueprintContainer = blueprintContainer;
         this.registry = blueprintContainer.getComponentDefinitionRegistry();
@@ -141,9 +145,16 @@ public class RecipeBuilder {
     }
 
     private Recipe createReferenceListRecipe(ReferenceListMetadata metadata) {
+        ValueRecipe filterRecipe = null;
+        if (metadata instanceof ExtendedReferenceMetadata) {
+            ValueMetadata filterMetadata = ((ExtendedServiceReferenceMetadata) metadata).getExtendedFilter();
+            if (filterMetadata != null) {
+                filterRecipe = (ValueRecipe) getValue(filterMetadata, null);
+            }
+        }
         CollectionRecipe listenersRecipe = null;
         if (metadata.getReferenceListeners() != null) {
-            listenersRecipe = new CollectionRecipe(getName(null), ArrayList.class);
+            listenersRecipe = new CollectionRecipe(getName(null), ArrayList.class, Object.class.getName());
             for (ReferenceListener listener : metadata.getReferenceListeners()) {
                 listenersRecipe.add(createRecipe(listener));
             }
@@ -151,15 +162,23 @@ public class RecipeBuilder {
         ReferenceListRecipe recipe = new ReferenceListRecipe(getName(metadata.getId()),
                                                  blueprintContainer,
                                                  metadata,
+                                                 filterRecipe,
                                                  listenersRecipe,
                                                  getDependencies(metadata));
         return recipe;
     }
 
     private ReferenceRecipe createReferenceRecipe(ReferenceMetadata metadata) {
+        ValueRecipe filterRecipe = null;
+        if (metadata instanceof ExtendedReferenceMetadata) {
+            ValueMetadata filterMetadata = ((ExtendedServiceReferenceMetadata) metadata).getExtendedFilter();
+            if (filterMetadata != null) {
+                filterRecipe = (ValueRecipe) getValue(filterMetadata, null);
+            }
+        }
         CollectionRecipe listenersRecipe = null;
         if (metadata.getReferenceListeners() != null) {
-            listenersRecipe = new CollectionRecipe(getName(null), ArrayList.class);
+            listenersRecipe = new CollectionRecipe(getName(null), ArrayList.class, Object.class.getName());
             for (ReferenceListener listener : metadata.getReferenceListeners()) {
                 listenersRecipe.add(createRecipe(listener));
             }
@@ -167,13 +186,14 @@ public class RecipeBuilder {
         ReferenceRecipe recipe = new ReferenceRecipe(getName(metadata.getId()),
                                                      blueprintContainer,
                                                      metadata,
+                                                     filterRecipe,
                                                      listenersRecipe,
                                                      getDependencies(metadata));
         return recipe;
     }
 
     private Recipe createServiceRecipe(ServiceMetadata serviceExport) {
-        CollectionRecipe listenersRecipe = new CollectionRecipe(getName(null), ArrayList.class);
+        CollectionRecipe listenersRecipe = new CollectionRecipe(getName(null), ArrayList.class, Object.class.getName());
         if (serviceExport.getRegistrationListeners() != null) {
             for (RegistrationListener listener : serviceExport.getRegistrationListeners()) {
                 listenersRecipe.add(createRecipe(listener));
@@ -227,9 +247,10 @@ public class RecipeBuilder {
                 allowsFieldInjection(beanMetadata));
         // Create refs for explicit dependencies
         recipe.setExplicitDependencies(getDependencies(beanMetadata));
-        recipe.setPrototype(MetadataUtil.isPrototypeScope(beanMetadata));
+        recipe.setPrototype(MetadataUtil.isPrototypeScope(beanMetadata) || MetadataUtil.isCustomScope(beanMetadata));
         recipe.setInitMethod(beanMetadata.getInitMethod());
         recipe.setDestroyMethod(beanMetadata.getDestroyMethod());
+        recipe.setInterceptorLookupKey(beanMetadata);
         List<BeanArgument> beanArguments = beanMetadata.getArguments();
         if (beanArguments != null && !beanArguments.isEmpty()) {
             boolean hasIndex = (beanArguments.get(0).getIndex() >= 0);
@@ -299,8 +320,8 @@ public class RecipeBuilder {
             return rr;
         } else if (v instanceof CollectionMetadata) {
             CollectionMetadata collectionMetadata = (CollectionMetadata) v;
-            Class cl = collectionMetadata.getCollectionClass();
-            Object type = collectionMetadata.getValueType();
+            Class<?> cl = collectionMetadata.getCollectionClass();
+            String type = collectionMetadata.getValueType();
             if (cl == Object[].class) {
                 ArrayRecipe ar = new ArrayRecipe(getName(null), type);
                 for (Metadata lv : collectionMetadata.getValues()) {
@@ -308,7 +329,7 @@ public class RecipeBuilder {
                 }
                 return ar;
             } else {
-                CollectionRecipe cr = new CollectionRecipe(getName(null), cl != null ? cl : ArrayList.class);
+                CollectionRecipe cr = new CollectionRecipe(getName(null), cl != null ? cl : ArrayList.class, type);
                 for (Metadata lv : collectionMetadata.getValues()) {
                     cr.add(getValue(lv, type));
                 }
@@ -318,7 +339,7 @@ public class RecipeBuilder {
             return createMapRecipe((MapMetadata) v);
         } else if (v instanceof PropsMetadata) {
             PropsMetadata mapValue = (PropsMetadata) v;
-            MapRecipe mr = new MapRecipe(getName(null), Properties.class);
+            MapRecipe mr = new MapRecipe(getName(null), Properties.class, String.class, String.class);
             for (MapEntry entry : mapValue.getEntries()) {
                 Recipe key = getValue(entry.getKey(), String.class);
                 Recipe val = getValue(entry.getValue(), String.class);
@@ -331,14 +352,14 @@ public class RecipeBuilder {
             IdRefRecipe rnr = new IdRefRecipe(getName(null), componentName);
             return rnr;
         } else {
-            throw new IllegalStateException("Unsupported value: " + v.getClass().getName());
+            throw new IllegalStateException("Unsupported value: " + (v != null ? v.getClass().getName() : "null"));
         }
     }
 
     private MapRecipe createMapRecipe(MapMetadata mapValue) {
         String keyType = mapValue.getKeyType();
         String valueType = mapValue.getValueType();
-        MapRecipe mr = new MapRecipe(getName(null), HashMap.class);
+        MapRecipe mr = new MapRecipe(getName(null), HashMap.class, keyType, valueType);
         for (MapEntry entry : mapValue.getEntries()) {
             Recipe key = getValue(entry.getKey(), keyType);
             Recipe val = getValue(entry.getValue(), valueType);

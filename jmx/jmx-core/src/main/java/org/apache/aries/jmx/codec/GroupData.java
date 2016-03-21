@@ -17,6 +17,7 @@
 package org.apache.aries.jmx.codec;
 
 import java.util.ArrayList;
+import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +36,7 @@ import org.osgi.service.useradmin.Role;
  * for the <code>CompositeData</code> representing a Group.
  * </p>
  * </p>
- * 
+ *
  * @version $Rev$ $Date$
  */
 public class GroupData extends UserData {
@@ -56,27 +57,41 @@ public class GroupData extends UserData {
      * @param group {@link Group} instance.
      */
     public GroupData(Group group) {
-        super(group.getName(), Role.GROUP);
-        setRequiredMembers(group);
-        setMembers(group);
+        super(group.getName(), Role.GROUP, group.getProperties(), group.getCredentials());
+        this.members = toArray(group.getMembers());
+        this.requiredMembers = toArray(group.getRequiredMembers());
     }
 
     /**
      * Constructs new GroupData.
-     * 
+     *
      * @param name group name.
      * @param members basic members.
      * @param requiredMembers required members.
      */
     public GroupData(String name, String[] members, String[] requiredMembers) {
-        super(name, Role.GROUP);
-        this.members = members;
-        this.requiredMembers = requiredMembers;
+        this(name, null, null, members, requiredMembers);
+    }
+    
+    /**
+     * Constructs new GroupData.
+     *
+     * @param name group name.
+     * @param properties group properties.
+     * @param credentials group credentials.
+     * @param members basic members.
+     * @param requiredMembers required members.
+     */
+    @SuppressWarnings("rawtypes")
+	public GroupData(String name, Dictionary properties, Dictionary credentials, String[] members, String[] requiredMembers) {
+        super(name, Role.GROUP, properties, credentials);
+        this.members = (members == null) ? new String[0] : members;
+        this.requiredMembers = (requiredMembers == null) ? new String[0] : requiredMembers;
     }
 
     /**
      * Translates GroupData to CompositeData represented by compositeType {@link UserAdminMBean#GROUP_TYPE}.
-     * 
+     *
      * @return translated GroupData to compositeData.
      */
     public CompositeData toCompositeData() {
@@ -84,6 +99,8 @@ public class GroupData extends UserData {
             Map<String, Object> items = new HashMap<String, Object>();
             items.put(UserAdminMBean.NAME, name);
             items.put(UserAdminMBean.TYPE, type);
+            // items.put(UserAdminMBean.PROPERTIES, getPropertiesTable());
+            // items.put(UserAdminMBean.CREDENTIALS, getCredentialsTable());
             items.put(UserAdminMBean.MEMBERS, members);
             items.put(UserAdminMBean.REQUIRED_MEMBERS, requiredMembers);
             return new CompositeDataSupport(UserAdminMBean.GROUP_TYPE, items);
@@ -94,7 +111,7 @@ public class GroupData extends UserData {
 
     /**
      * Static factory method to create GroupData from CompositeData object.
-     * 
+     *
      * @param data
      *            {@link CompositeData} instance.
      * @return GroupData instance.
@@ -104,9 +121,12 @@ public class GroupData extends UserData {
             return null;
         }
         String name = (String) data.get(UserAdminMBean.NAME);
+        // Dictionary<String, Object> props = propertiesFrom((TabularData) data.get(UserAdminMBean.PROPERTIES));
+        // Dictionary<String, Object> credentials = propertiesFrom((TabularData) data.get(UserAdminMBean.CREDENTIALS));
+
         String[] members = (String[]) data.get(UserAdminMBean.MEMBERS);
         String[] requiredMembers = (String[]) data.get(UserAdminMBean.REQUIRED_MEMBERS);
-        return new GroupData(name, members, requiredMembers);
+        return new GroupData(name, null, null,/* props, credentials, */ members, requiredMembers);
     }
 
     /**
@@ -123,34 +143,13 @@ public class GroupData extends UserData {
         return requiredMembers;
     }
 
-    /**
-     * Sets group basic members by getting them from Group object.
-     * @param group {@link Group} instance.
-     */
-    private void setMembers(org.osgi.service.useradmin.Group group) {
-        Role[] roles = group.getMembers();
+    private static String[] toArray(Role[] roles) {
+        List<String> members = new ArrayList<String>();
         if (roles != null) {
-            List<String> members = new ArrayList<String>();
             for (Role role : roles) {
                 members.add(role.getName());
             }
-            this.members = members.toArray(new String[roles.length]);
         }
+        return members.toArray(new String[members.size()]);
     }
-
-    /**
-     * Sets group required members by getting them from Group object.
-     * @param group {@link Group} instance.
-     */
-    private void setRequiredMembers(org.osgi.service.useradmin.Group group) {
-        Role[] requiredRoles = group.getRequiredMembers();
-        if (requiredRoles != null) {
-            List<String> reqMembers = new ArrayList<String>();
-            for (Role role : requiredRoles) {
-                reqMembers.add(role.getName());
-            }
-            this.requiredMembers = reqMembers.toArray(new String[requiredRoles.length]);
-        }
-    }
-
 }

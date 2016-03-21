@@ -24,8 +24,8 @@
 
     <provider>org.apache.openjpa.persistence.PersistenceProviderImpl</provider>
 
-    <jta-data-source>aries:services/javax.sql.DataSource/(osgi.jndi.service.name=jdbc/blogdb)</jta-data-source>
-    <non-jta-data-source>aries:services/javax.sql.DataSource/(osgi.jndi.service.name=jdbc/blogdbnojta)</non-jta-data-source>
+    <jta-data-source>osgi:service/jdbc/blogdb</jta-data-source>
+    <non-jta-data-source>osgi:service/jdbc/blogdbnojta</non-jta-data-source>
 
     <class>org.apache.aries.samples.blog.persistence.jpa.entity.AuthorImpl</class>
     <class>org.apache.aries.samples.blog.persistence.jpa.entity.EntryImpl</class>
@@ -33,6 +33,11 @@
     
     
      <properties>
+     <!-- These properties are creating the database on the fly. We are using them to avoid users having
+          to create a database to run the sample. This is not something that should be used in production.
+          See also the create=true line in the blog-datasource blueprint meta data -->
+     <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(ForeignKeys=true)"/>
+     <property name="openjpa.jdbc.DBDictionary" value="derby"/>
     </properties>
    
   </persistence-unit>

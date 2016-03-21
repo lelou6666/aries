@@ -29,8 +29,8 @@
 		<TABLE border="0" cellpadding="0" cellspacing="0" width="100%">
 			<TR>
 				<TD align="left" class="topbardiv" nowrap=""><A
-					href="http://incubator.apache.org/aries/"
-					title="Apache Aries (incubating)"> <IMG border="0"
+					href="http://aries.apache.org/"
+					title="Apache Aries "> <IMG border="0"
 					src="images/Arieslogo_Horizontal.gif"> </A></TD>
 				<TD align="right" nowrap="">
 				<div class=tutorialHeader>Blueprint Tutorial</div>
@@ -84,9 +84,9 @@ will use the new shell to run some samples.</p>
 
 <p>In the new shell, change directory to [toplevel]/bin and copy the following
 three files into the [toplevel]/dropins directory:</p>
-<div class=code>org.apache.aries.tutorials.blueprint.greeter.api-0.1-incubating-SNAPSHOT.jar<br>
-org.apache.aries.tutorials.blueprint.greeter.server.osgi-0.1-incubating-SNAPSHOT.jar<br>
-org.apache.aries.tutorials.blueprint.greeter.client.osgi-0.1-incubating-SNAPSHOT.jar<br>
+<div class=code>org.apache.aries.tutorials.blueprint.greeter.api-0.1-SNAPSHOT.jar<br>
+org.apache.aries.tutorials.blueprint.greeter.server.osgi-0.1-SNAPSHOT.jar<br>
+org.apache.aries.tutorials.blueprint.greeter.client.osgi-0.1-SNAPSHOT.jar<br>
 </div>
 <p>This installs those bundles in the OSGi framework. Back in the OSGi console window, type 'ss' again, you should see
 three new bundles in the 'INSTALLED' state. Start all three new bundles
@@ -221,8 +221,8 @@ your blueprint xml file:</p>
 changed.</p>
 
 <p>To build the code, run the script build.sh (or build.bat) in the
-[toplevel]/scripts directory. If you are using your own Maven repository
-the commands are:</p>
+[toplevel]/scripts directory. 
+The commands are:</p>
 <div class=code>./build.sh org.apache.aries.tutorials.blueprint.greeter.api<br>
 ./build.sh org.apache.aries.tutorials.blueprint.greeter.client.osgi<br>
 ./build.sh org.apache.aries.tutorials.blueprint.greeter.server.osgi<br>
@@ -335,7 +335,7 @@ from the class constructor. Like this:
 <p>The last step is to modify the blueprint xml to reflect these
 changes. Edit the blueprint xml you created earlier:</p>
 <div class=code>
-[toplevel]/source/org.apache.aries.tutorials.blueprint.greeter.client.osgi/src/main/resources/OSGI_INF/blueprint/blueprint.xml
+[toplevel]/source/org.apache.aries.tutorials.blueprint.greeter.client.osgi/src/main/resources/OSGI-INF/blueprint/blueprint.xml
 </div>
 <p>Remove the following line from the blueprint xml</p>
 <div class=code>&lt;argument ref="blueprintBundleContext"/&gt;</div>

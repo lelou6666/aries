@@ -17,11 +17,13 @@
 -->
 <blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                xsi:schemaLocation="http://www.osgi.org/xmlns/blueprint/v1.0.0"
                 default-activation="eager">
   
     <bean id="derbyXADataSource" class="org.apache.derby.jdbc.EmbeddedXADataSource">
         <property name="databaseName" value="tradedb"/>
+        <!-- This creates the database on the fly. See the persistence.xml  under ariestrader-entities for property
+          configuration. The DB is created from persistence entities, this is not recommended for production use.  -->
+       <property name="createDatabase" value="create" />
     </bean>
   
     <service id="TradeDataSource" ref="derbyXADataSource" interface="javax.sql.XADataSource">
@@ -33,6 +35,8 @@
   
     <bean id="derbyDataSource" class="org.apache.derby.jdbc.EmbeddedDataSource">
         <property name="databaseName" value="tradedb"/>
+        <!-- This creates the database on the fly. -->
+       <property name="createDatabase" value="create" />
     </bean>
   
     <service id="NoTxTradeDataSource" ref="derbyDataSource" interface="javax.sql.DataSource">

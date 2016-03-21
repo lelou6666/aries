@@ -16,7 +16,7 @@
  */
 package org.apache.aries.jmx.cm;
 
-import static org.osgi.jmx.JmxConstants.*;
+import static org.osgi.jmx.JmxConstants.PROPERTIES_TYPE;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -65,9 +65,10 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
      */
     public String createFactoryConfigurationForLocation(String factoryPid, String location) throws IOException {
         if (factoryPid == null || factoryPid.length() < 1) {
-            throw new IllegalArgumentException("Argument factoryPid cannot be null or empty");
+            throw new IOException("Argument factoryPid cannot be null or empty");
         }
-        Configuration config = configurationAdmin.createFactoryConfiguration(factoryPid, location);
+        Configuration config = configurationAdmin.createFactoryConfiguration(factoryPid);
+        config.setBundleLocation(location);
         return config.getPid();
     }
 
@@ -83,7 +84,7 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
      */
     public void deleteForLocation(String pid, String location) throws IOException {
         if (pid == null || pid.length() < 1) {
-            throw new IllegalArgumentException("Argument pid cannot be null or empty");
+            throw new IOException("Argument pid cannot be null or empty");
         }
         Configuration config = configurationAdmin.getConfiguration(pid, location);
         config.delete();
@@ -94,14 +95,13 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
      */
     public void deleteConfigurations(String filter) throws IOException {
         if (filter == null || filter.length() < 1) {
-            throw new IllegalArgumentException("Argument filter cannot be null or empty");
+            throw new IOException("Argument filter cannot be null or empty");
         }
         Configuration[] configuations = null;
         try {
             configuations = configurationAdmin.listConfigurations(filter);
-        }
-        catch (InvalidSyntaxException e) {
-            throw new IllegalArgumentException("Invalid filter [" + filter + "] : " + e);
+        } catch (InvalidSyntaxException e) {
+            throw new IOException("Invalid filter [" + filter + "] : " + e);
         }
         if (configuations != null) {
             for (Configuration config : configuations) {
@@ -115,7 +115,7 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
      */
     public String getBundleLocation(String pid) throws IOException {
         if (pid == null || pid.length() < 1) {
-            throw new IllegalArgumentException("Argument pid cannot be null or empty");
+            throw new IOException("Argument pid cannot be null or empty");
         }
         Configuration config = configurationAdmin.getConfiguration(pid, null);
         String bundleLocation = (config.getBundleLocation() == null) ? "Configuration is not yet bound to a bundle location" : config.getBundleLocation();
@@ -127,15 +127,14 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
      */
     public String[][] getConfigurations(String filter) throws IOException {
         if (filter == null || filter.length() < 1) {
-            throw new IllegalArgumentException("Argument filter cannot be null or empty");
+            throw new IOException("Argument filter cannot be null or empty");
         }
         List<String[]> result = new ArrayList<String[]>();
         Configuration[] configurations = null;
         try {
             configurations = configurationAdmin.listConfigurations(filter);
-        }
-        catch (InvalidSyntaxException e) {
-            throw new IllegalArgumentException("Invalid filter [" + filter + "] : " + e);
+        } catch (InvalidSyntaxException e) {
+            throw new IOException("Invalid filter [" + filter + "] : " + e);
         }
         if (configurations != null) {
             for (Configuration config : configurations) {
@@ -157,7 +156,7 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
      */
     public String getFactoryPidForLocation(String pid, String location) throws IOException {
         if (pid == null || pid.length() < 1) {
-            throw new IllegalArgumentException("Argument pid cannot be null or empty");
+            throw new IOException("Argument pid cannot be null or empty");
         }
         Configuration config = configurationAdmin.getConfiguration(pid, location);
         return config.getFactoryPid();
@@ -173,15 +172,15 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
     /**
      * @see org.osgi.jmx.service.cm.ConfigurationAdminMBean#getPropertiesForLocation(java.lang.String, java.lang.String)
      */
-    @SuppressWarnings("unchecked")
     public TabularData getPropertiesForLocation(String pid, String location) throws IOException {
         if (pid == null || pid.length() < 1) {
-            throw new IllegalArgumentException("Argument pid cannot be null or empty");
+            throw new IOException("Argument pid cannot be null or empty");
         }
-        TabularData propertiesTable = new TabularDataSupport(PROPERTIES_TYPE);
+        TabularData propertiesTable = null;
         Configuration config = configurationAdmin.getConfiguration(pid, location);
         Dictionary<String, Object> properties = config.getProperties();
         if (properties != null) {
+            propertiesTable = new TabularDataSupport(PROPERTIES_TYPE);
             Enumeration<String> keys = properties.keys();
             while (keys.hasMoreElements()) {
                 String key = keys.nextElement();
@@ -196,7 +195,7 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
      */
     public void setBundleLocation(String pid, String location) throws IOException {
         if (pid == null || pid.length() < 1) {
-            throw new IllegalArgumentException("Argument factoryPid cannot be null or empty");
+            throw new IOException("Argument factoryPid cannot be null or empty");
         }
         Configuration config = configurationAdmin.getConfiguration(pid, null);
         config.setBundleLocation(location);
@@ -215,18 +214,19 @@ public class ConfigurationAdmin implements ConfigurationAdminMBean {
     @SuppressWarnings("unchecked")
     public void updateForLocation(String pid, String location, TabularData configurationTable) throws IOException {
         if (pid == null || pid.length() < 1) {
-            throw new IllegalArgumentException("Argument pid cannot be null or empty");
+            throw new IOException("Argument pid cannot be null or empty");
         }
         if (configurationTable == null) {
-            throw new IllegalArgumentException("Argument properties cannot be null");
+            throw new IOException("Argument configurationTable cannot be null");
         }
+                
         if (!PROPERTIES_TYPE.equals(configurationTable.getTabularType())) {
-            throw new IllegalArgumentException("Invalid TabularType ["  + configurationTable.getTabularType() + "]");
+            throw new IOException("Invalid TabularType ["  + configurationTable.getTabularType() + "]");
         }
         Dictionary<String, Object> configurationProperties = new Hashtable<String, Object>();
         Collection<CompositeData> compositeData = (Collection<CompositeData>) configurationTable.values();
         for (CompositeData row: compositeData) {
-            PropertyData<? extends Class> propertyData = PropertyData.from(row);
+            PropertyData<? extends Class<?>> propertyData = PropertyData.from(row);
             configurationProperties.put(propertyData.getKey(), propertyData.getValue());
         }
         Configuration config = configurationAdmin.getConfiguration(pid, location);

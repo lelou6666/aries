@@ -409,13 +409,13 @@ public class TradeConfigServlet extends HttpServlet {
 			else if (action.equals("buildDB"))
 			{
 				resp.setContentType("text/html");
-                new TradeBuildDB(resp.getWriter(), null);
+                new TradeBuildDB(resp.getWriter(), false);
 				result = "AriesTrader Database Built - " + TradeConfig.getMAX_USERS() + "users created";
 			}
             else if (action.equals("buildDBTables"))
             {
                 resp.setContentType("text/html");
-                new TradeBuildDB(resp.getWriter(), getServletConfig().getServletContext().getRealPath("/"));
+                new TradeBuildDB(resp.getWriter(), true);
             }
 			doConfigDisplay(req, resp, result + "Current AriesTrader Configuration:");
 		}

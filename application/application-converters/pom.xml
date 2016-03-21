@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -17,22 +18,69 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-    <parent>
-        <artifactId>application</artifactId>
-        <groupId>org.apache.aries.application</groupId>
-        <version>0.2-incubating-SNAPSHOT</version>
-    </parent>
+
     <modelVersion>4.0.0</modelVersion>
 
+    <parent>
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../../parent/pom.xml</relativePath>
+    </parent>
+
+    <groupId>org.apache.aries.application</groupId>
     <artifactId>org.apache.aries.application.converters</artifactId>
     <packaging>bundle</packaging>
+    <version>1.0.1-SNAPSHOT</version>
     <name>Apache Aries Application Converters</name>
+     
+    <scm>
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/application/application-converters</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/application/application-converters</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/application/application-converters</url>
+    </scm>
 
     <properties>
-        <aries.osgi.export.pkg />
+        <aries.osgi.export.pkg>
+        </aries.osgi.export.pkg>
+        <aries.osgi.import.pkg>
+            org.apache.aries.application.management.spi.convert;provide:=true,
+            org.apache.aries.web.converter;provide:=true,
+            *
+        </aries.osgi.import.pkg>
+        <aries.osgi.private.pkg>
+            org.apache.aries.application.converters;
+        </aries.osgi.private.pkg>
+        <lastReleaseVersion>1.0.0</lastReleaseVersion>
     </properties>
 
     <dependencies>
+        <!--Dependency on other Application bundles -->
+        <dependency>
+            <groupId>org.apache.aries.application</groupId>
+            <artifactId>org.apache.aries.application.api</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+        	<groupId>org.apache.aries.application</groupId>
+        	<artifactId>org.apache.aries.application.utils</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <!-- Dependency on other Aries module bundles -->
+        <dependency>
+            <groupId>org.apache.aries.testsupport</groupId>
+            <artifactId>org.apache.aries.testsupport.unit</artifactId>
+            <scope>test</scope>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries.web</groupId>
+            <artifactId>org.apache.aries.web.urlhandler</artifactId>
+            <scope>provided</scope>
+            <version>1.0.0</version>
+        </dependency>
+        <!--External dependencies. Versions may be specified in parent -->
         <dependency>
             <groupId>org.osgi</groupId>
             <artifactId>org.osgi.core</artifactId>
@@ -44,23 +92,10 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>asm</groupId>
+            <groupId>org.ow2.asm</groupId>
             <artifactId>asm-all</artifactId>
             <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.aries.application</groupId>
-            <artifactId>org.apache.aries.application.api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.aries.testsupport</groupId>
-            <artifactId>org.apache.aries.testsupport.unit</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.aries.web</groupId>
-            <artifactId>org.apache.aries.web.urlhandler</artifactId>
-            <scope>provided</scope>
+            <version>5.0.3</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -68,5 +103,23 @@
             <scope>provided</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.aries.versioning</groupId>
+                <artifactId>org.apache.aries.versioning.plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-verify</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>version-check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

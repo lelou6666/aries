@@ -16,8 +16,7 @@
     limitations under the License.
 -->
 <blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xsi:schemaLocation="http://www.osgi.org/xmlns/blueprint/v1.0.0">
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
   <bean id="blogAuthorManager" class="org.apache.aries.samples.blog.biz.BlogAuthorManagerImpl">
     <property name="persistenceService" ref="persistenceManager"/>
@@ -26,16 +25,16 @@
   <bean id="blogEntryManager" class="org.apache.aries.samples.blog.biz.BlogEntryManagerImpl">
     <property name="persistenceService" ref="persistenceManager"/>
   </bean>
-  
+ 
   <bean id="blogCommentManager" class="org.apache.aries.samples.blog.biz.BlogCommentManagerImpl">
     <property name="commentService" ref="commentPersistenceService"/>
   </bean>
- 
+  
   
   <bean id="bloggingServiceComponent" class="org.apache.aries.samples.blog.biz.BloggingServiceImpl">
     <property name="blogEntryManager" ref="blogEntryManager"/>
     <property name="blogAuthorManager" ref="blogAuthorManager"/>
-  <property name="blogCommentManager" ref="blogCommentManager"/>
+    <property name="blogCommentManager" ref="blogCommentManager"/>
   </bean>
   
   <service ref="bloggingServiceComponent" interface="org.apache.aries.samples.blog.api.BloggingService"/>
@@ -45,5 +44,4 @@
   <reference id="commentPersistenceService" availability="optional" interface="org.apache.aries.samples.blog.api.comment.persistence.BlogCommentService">
     <reference-listener ref="blogCommentManager" bind-method="blogServiceBound" unbind-method="blogServiceUnbound"/>
   </reference>
- 
 </blueprint>

@@ -21,54 +21,33 @@ package org.apache.aries.jndi;
 import java.util.Hashtable;
 
 import javax.naming.Context;
+import javax.naming.InitialContext;
 import javax.naming.NamingException;
+import javax.naming.NoInitialContextException;
 import javax.naming.spi.InitialContextFactory;
 import javax.naming.spi.InitialContextFactoryBuilder;
 
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.ServiceReference;
 
+public class OSGiInitialContextFactoryBuilder implements InitialContextFactoryBuilder, InitialContextFactory {
 
-public class OSGiInitialContextFactoryBuilder implements InitialContextFactoryBuilder,
-  InitialContextFactory
-{
-	private BundleContext _context;
-	
-	public OSGiInitialContextFactoryBuilder(BundleContext context)
-	{
-		_context = context;
+	public InitialContextFactory createInitialContextFactory(Hashtable<?, ?> environment) 
+	    throws NamingException {
+	    return this;
 	}
-	
-  public InitialContextFactory createInitialContextFactory(Hashtable<?, ?> environment)
-      throws NamingException
-  {
-    return this;
-  }
-  public Context getInitialContext(Hashtable<?, ?> environment) throws NamingException
-  {
-  	Context toReturn = null;
-  	
-  	ServiceReference ref = _context.getServiceReference(DelegateContextFactory.class.getName());
-  	
-  	//TODO: is the custom interface DelegateContextFactory the right way to go about things
-  	//  or is there a more generic way in RFC 142
-  	if (ref != null) {
-  	  try {
-    		DelegateContextFactory dcf = (DelegateContextFactory) _context.getService(ref);
-    		
-    		if (dcf != null) {
-    			toReturn = dcf.getInitialContext(environment);
-    		}
-  	  }
-  	  finally {
-  	    _context.ungetService(ref);
-  	  }
-  	}
-  	
-  	if (toReturn == null) {
-  		toReturn  = new DelegateContext(environment);
-  	}
-  	
-    return toReturn;
-  }
+  
+	public Context getInitialContext(Hashtable<?, ?> environment) 
+	    throws NamingException {
+	    
+	    AugmenterInvokerImpl.getInstance().augmentEnvironment(environment);
+	  
+	    BundleContext context = Utils.getBundleContext(environment, InitialContext.class);	    
+	    if (context == null) {
+            throw new NoInitialContextException(Utils.MESSAGES.getMessage("cannot.find.callers.bundlecontext"));
+	    }
+	    	    
+      AugmenterInvokerImpl.getInstance().unaugmentEnvironment(environment);
+
+	    return ContextHelper.getInitialContext(context, environment);
+	}
 }
