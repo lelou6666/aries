@@ -18,13 +18,17 @@
  */
 package org.apache.aries.jndi.url;
 
+import java.util.Dictionary;
 import java.util.Hashtable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.naming.spi.ObjectFactory;
 
 import org.apache.aries.proxy.ProxyManager;
-import org.apache.aries.util.SingleServiceTracker;
-import org.apache.aries.util.SingleServiceTracker.SingleServiceListener;
+import org.apache.aries.util.AriesFrameworkUtil;
+import org.apache.aries.util.tracker.SingleServiceTracker;
+import org.apache.aries.util.tracker.SingleServiceTracker.SingleServiceListener;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
@@ -52,18 +56,20 @@ public class Activator implements BundleActivator, SingleServiceListener
           Hashtable<Object, Object> blueprintURlSchemeProps = new Hashtable<Object, Object>();
           blueprintURlSchemeProps.put(JNDIConstants.JNDI_URLSCHEME, new String[] { "blueprint" });
           blueprintUrlReg = ctx.registerService(ObjectFactory.class.getName(),
-              new BlueprintURLContextServiceFactory(), blueprintURlSchemeProps);
+              new BlueprintURLContextServiceFactory(), (Dictionary) blueprintURlSchemeProps);
         } catch (ClassNotFoundException cnfe) {
           // The blueprint packages aren't available, so do nothing. That's fine.
-          cnfe.printStackTrace();
+          Logger logger = Logger.getLogger("org.apache.aries.jndi");
+          logger.log(Level.INFO, "Blueprint support disabled: " + cnfe);
+          logger.log(Level.FINE, "Blueprint support disabled", cnfe);
         }
     }
 
     @Override
     public void stop(BundleContext context) {
       proxyManager.close();
-      if (osgiUrlReg != null) osgiUrlReg.unregister();
-      if (blueprintUrlReg != null) blueprintUrlReg.unregister();
+      AriesFrameworkUtil.safeUnregisterService(osgiUrlReg);
+      AriesFrameworkUtil.safeUnregisterService(blueprintUrlReg);
     }
   
 
@@ -73,13 +79,13 @@ public class Activator implements BundleActivator, SingleServiceListener
     Hashtable<Object, Object> osgiUrlprops = new Hashtable<Object, Object>();
     osgiUrlprops.put(JNDIConstants.JNDI_URLSCHEME, new String[] { "osgi", "aries" });
     osgiUrlReg = ctx.registerService(ObjectFactory.class.getName(),
-        new OsgiURLContextServiceFactory(), osgiUrlprops);
+        new OsgiURLContextServiceFactory(), (Dictionary) osgiUrlprops);
   }
 
   @Override
   public void serviceLost() 
   {
-    if (osgiUrlReg != null) osgiUrlReg.unregister();
+    AriesFrameworkUtil.safeUnregisterService(osgiUrlReg);
     osgiUrlReg = null;
   }
 

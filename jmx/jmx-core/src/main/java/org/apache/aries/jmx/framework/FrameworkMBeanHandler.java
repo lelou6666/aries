@@ -21,6 +21,8 @@ import javax.management.StandardMBean;
 
 import org.apache.aries.jmx.Logger;
 import org.apache.aries.jmx.MBeanHandler;
+import org.apache.aries.jmx.agent.JMXAgentContext;
+import org.apache.aries.jmx.util.ObjectNameUtils;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
 import org.osgi.jmx.framework.FrameworkMBean;
@@ -32,13 +34,14 @@ import org.osgi.service.startlevel.StartLevel;
  * <p>
  * <tt>FrameworkMBeanHandler</tt> represents MBeanHandler which
  * holding information about {@link FrameworkMBean}.</p>
- * 
+ *
  * @see MBeanHandler
- * 
+ *
  * @version $Rev$ $Date$
  */
 public class FrameworkMBeanHandler implements MBeanHandler {
 
+    private JMXAgentContext agentContext;
     private String name;
     private StandardMBean mbean;
     private BundleContext context;
@@ -46,14 +49,14 @@ public class FrameworkMBeanHandler implements MBeanHandler {
 
     /**
      * Constructs new FrameworkMBeanHandler.
-     * 
-     * @param context bundle context of JMX bundle.
-     * @param logger @see {@link Logger}.
+     *
+     * @param agentContext agent context
      */
-    public FrameworkMBeanHandler(BundleContext context, Logger logger) {
-        this.context = context;
-        this.name = FrameworkMBean.OBJECTNAME;
-        this.logger = logger;
+    public FrameworkMBeanHandler(JMXAgentContext agentContext) {
+        this.agentContext = agentContext;
+        this.context = agentContext.getBundleContext();
+        this.logger = agentContext.getLogger();
+        this.name = ObjectNameUtils.createFullObjectName(context, FrameworkMBean.OBJECTNAME);
     }
 
     /**
@@ -77,13 +80,14 @@ public class FrameworkMBeanHandler implements MBeanHandler {
         } catch (NotCompliantMBeanException e) {
             logger.log(LogService.LOG_ERROR, "Not compliant MBean", e);
         }
+        agentContext.registerMBean(this);
     }
 
     /**
      * @see org.apache.aries.jmx.MBeanHandler#close()
      */
     public void close() {
-        //not used
+        agentContext.unregisterMBean(this);
     }
 
     /**

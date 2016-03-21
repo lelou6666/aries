@@ -18,14 +18,17 @@
  */
 package org.apache.aries.proxy.impl;
 
+
 import org.apache.aries.proxy.ProxyManager;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceRegistration;
 
 public class ProxyManagerActivator implements BundleActivator 
 {
   private static final boolean ASM_PROXY_SUPPORTED;
   private AbstractProxyManager managerService;
+  private ServiceRegistration registration;
   
   static
   {
@@ -33,7 +36,7 @@ public class ProxyManagerActivator implements BundleActivator
     try {
       // Try load load a asm class (to make sure it's actually available
       // then create the asm factory
-      Class.forName("org.objectweb.asm.ClassVisitor");
+      Class.forName("org.objectweb.asm.ClassVisitor", false, ProxyManagerActivator.class.getClassLoader());
       classProxy = true;
     } catch (Throwable t) {
     }
@@ -45,14 +48,25 @@ public class ProxyManagerActivator implements BundleActivator
   {
     if (ASM_PROXY_SUPPORTED) {
       managerService = new AsmProxyManager();
+      
+      try {
+        //if ASM is available then we should also try weaving
+        Class<?> cls = Class.forName("org.apache.aries.proxy.impl.weaving.ProxyWeavingHook",
+        		true, ProxyManagerActivator.class.getClassLoader());
+        cls.getConstructor(BundleContext.class).newInstance(context);
+      } catch (Throwable t) {
+        //We don't care about this, we just won't have registered the hook
+      }
+      
     } else {
       managerService = new JdkProxyManager();
     }
     
-    context.registerService(ProxyManager.class.getName(), managerService, null);
+    registration = context.registerService(ProxyManager.class.getName(), managerService, null);
   }
 
   public void stop(BundleContext context)
   {
+    registration.unregister();
   }
 }

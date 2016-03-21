@@ -34,7 +34,11 @@ import org.osgi.framework.Bundle;
  * A ClassLoader delegating to a given OSGi bundle.
  *
  * @version $Rev$, $Date$
+ * @deprecated - will be removed in a future version of Aries Blueprint
+ *           Use AriesFrameworkUtil#getClassLoader(Bundle) and
+ *           or AriesFrameworkUtil#getClassLoaderForced(Bundle) instead     
  */
+@Deprecated
 public class BundleDelegatingClassLoader extends ClassLoader {
 
     private final Bundle bundle;
@@ -49,7 +53,7 @@ public class BundleDelegatingClassLoader extends ClassLoader {
         this.classLoader = classLoader;
     }
 
-    protected Class findClass(final String name) throws ClassNotFoundException {
+    protected Class<?> findClass(final String name) throws ClassNotFoundException {
         try {
             return AccessController.doPrivileged(new PrivilegedExceptionAction<Class<?>>() {
                 public Class<?> run() throws ClassNotFoundException 
@@ -79,7 +83,7 @@ public class BundleDelegatingClassLoader extends ClassLoader {
         return resource;
     }
 
-    protected Enumeration findResources(final String name) throws IOException {
+    protected Enumeration<URL> findResources(final String name) throws IOException {
         Enumeration<URL> urls;
         try {
             urls =  AccessController.doPrivileged(new PrivilegedExceptionAction<Enumeration<URL>>() {
@@ -104,7 +108,7 @@ public class BundleDelegatingClassLoader extends ClassLoader {
         return urls;    
     }
 
-    protected Class loadClass(String name, boolean resolve) throws ClassNotFoundException {
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         Class clazz;
         try {
             clazz = findClass(name);
@@ -114,10 +118,10 @@ public class BundleDelegatingClassLoader extends ClassLoader {
                 try {
                     clazz = classLoader.loadClass(name);
                 } catch (ClassNotFoundException e) {
-                    throw new ClassNotFoundException(name + " from bundle " + bundle.getBundleId() + " (" + bundle.getSymbolicName() + ")", cnfe);
+                    throw new ClassNotFoundException(name + " from bundle " + bundle.getSymbolicName() + "/" + bundle.getVersion(), cnfe);
                 }
             } else {
-                throw new ClassNotFoundException(name + " from bundle " + bundle.getBundleId() + " (" + bundle.getSymbolicName() + ")", cnfe);
+                throw new ClassNotFoundException(name + " from bundle " + bundle.getSymbolicName() + "/" + bundle.getVersion(), cnfe);
             }
         }
         if (resolve) {

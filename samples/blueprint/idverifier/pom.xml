@@ -20,9 +20,15 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
+<<<<<<< HEAD
         <groupId>org.apache.aries.samples.blueprint</groupId>
         <artifactId>blueprint</artifactId>
         <version>0.3.1-SNAPSHOT</version>
+=======
+        <groupId>org.apache.aries.samples</groupId>
+        <artifactId>blueprint</artifactId>
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.samples.blueprint.idverifier</groupId>

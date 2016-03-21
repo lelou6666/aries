@@ -21,10 +21,13 @@ package org.apache.aries.blueprint.ext;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.Dictionary;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.aries.blueprint.ext.evaluator.PropertyEvaluator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,6 +51,7 @@ public class PropertyPlaceholder extends AbstractPropertyPlaceholder {
     private List<URL> locations;
     private boolean ignoreMissingLocations;
     private SystemProperties systemProperties = SystemProperties.fallback;
+    private PropertyEvaluator evaluator = null;
 
     public Map getDefaultProperties() {
         return defaultProperties;
@@ -79,6 +83,14 @@ public class PropertyPlaceholder extends AbstractPropertyPlaceholder {
 
     public void setSystemProperties(SystemProperties systemProperties) {
         this.systemProperties = systemProperties;
+    }
+
+    public PropertyEvaluator getEvaluator() {
+        return evaluator;
+    }
+
+    public void setEvaluator(PropertyEvaluator evaluator) {
+        this.evaluator = evaluator;
     }
 
     public void init() throws Exception {
@@ -139,4 +151,54 @@ public class PropertyPlaceholder extends AbstractPropertyPlaceholder {
         return v != null ? v.toString() : null;
     }
 
+    @Override
+    protected String retrieveValue(String expression) {
+        LOGGER.debug("Retrieving Value from expression: {}", expression);
+        
+        if (evaluator == null) {
+            return super.retrieveValue(expression);
+        } else {
+            return evaluator.evaluate(expression, new Dictionary<String, String>(){
+                @Override
+                public String get(Object key) {
+                    return getProperty((String) key);
+                }
+
+                // following are not important
+                @Override
+                public String put(String key, String value) {
+                    throw new UnsupportedOperationException();
+                }
+                
+                @Override
+                public Enumeration<String> elements() {
+                    throw new UnsupportedOperationException();
+                }
+                
+                @Override
+                public boolean isEmpty() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public Enumeration<String> keys() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public String remove(Object key) {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public int size() {
+                    throw new UnsupportedOperationException();
+                }
+                
+            });
+        }
+
+    }
+    
+   
 }

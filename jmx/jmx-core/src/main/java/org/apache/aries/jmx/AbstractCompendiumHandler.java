@@ -16,11 +16,12 @@
  */
 package org.apache.aries.jmx;
 
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.management.StandardMBean;
 
 import org.apache.aries.jmx.agent.JMXAgentContext;
+import org.apache.aries.jmx.util.ObjectNameUtils;
 import org.osgi.framework.Constants;
 import org.osgi.framework.Filter;
 import org.osgi.framework.ServiceReference;
@@ -39,11 +40,12 @@ import org.osgi.util.tracker.ServiceTracker;
  * 
  * @version $Rev$ $Date$
  */
+@SuppressWarnings({"rawtypes", "unchecked"})
 public abstract class AbstractCompendiumHandler extends ServiceTracker implements MBeanHandler {
 
     protected final JMXAgentContext agentContext;
     protected StandardMBean mbean;
-    protected Long trackedId;
+    protected final AtomicLong trackedId = new AtomicLong();
     
     /**
      * 
@@ -73,26 +75,19 @@ public abstract class AbstractCompendiumHandler extends ServiceTracker implement
     public Object addingService(ServiceReference reference) {
         Logger logger = agentContext.getLogger();
         Object trackedService = null;
-        Long serviceId = (Long) reference.getProperty(Constants.SERVICE_ID);
+        long serviceId = (Long) reference.getProperty(Constants.SERVICE_ID);
         //API stipulates versions for compendium services with static ObjectName
         //This shouldn't happen but added as a consistency check
-        if (getTrackingCount() > 0) {
-            String serviceDescription = (String) ((reference.getProperty(Constants.SERVICE_DESCRIPTION) != null) ? 
-                    reference.getProperty(Constants.SERVICE_DESCRIPTION) : reference.getProperty(Constants.OBJECTCLASS));
-            logger.log(LogService.LOG_WARNING, "Detected secondary ServiceReference for [" + serviceDescription
-                    + "] with " + Constants.SERVICE_ID + " [" + serviceId + "] Only 1 instance will be JMX managed");
-        } else {
+        if (trackedId.compareAndSet(0, serviceId)) {
             logger.log(LogService.LOG_INFO, "Registering MBean with ObjectName [" + getName() + "] for service with "
                     + Constants.SERVICE_ID + " [" + serviceId + "]");
             trackedService = context.getService(reference);
             mbean = constructInjectMBean(trackedService);
-            ExecutorService executor = agentContext.getRegistrationExecutor();
-            executor.submit(new Runnable() {
-                public void run() {
-                    agentContext.registerMBean(AbstractCompendiumHandler.this);
-                }
-            });
-            trackedId = serviceId;
+            agentContext.registerMBean(AbstractCompendiumHandler.this);
+        } else {
+            String serviceDescription = getServiceDescription(reference);
+            logger.log(LogService.LOG_WARNING, "Detected secondary ServiceReference for [" + serviceDescription
+                    + "] with " + Constants.SERVICE_ID + " [" + serviceId + "] Only 1 instance will be JMX managed");
         }
         return trackedService;
     }
@@ -104,24 +99,37 @@ public abstract class AbstractCompendiumHandler extends ServiceTracker implement
      */
     public void removedService(ServiceReference reference, Object service) {
         Logger logger = agentContext.getLogger();
-        Long serviceID = (Long) reference.getProperty(Constants.SERVICE_ID);
-        if (trackedId != null && !trackedId.equals(serviceID)) {
-            String serviceDescription = (String) ((reference.getProperty(Constants.SERVICE_DESCRIPTION) != null) ? 
-                    reference.getProperty(Constants.SERVICE_DESCRIPTION) : reference.getProperty(Constants.OBJECTCLASS));
-            logger.log(LogService.LOG_WARNING, "ServiceReference for [" + serviceDescription + "] with "
-                    + Constants.SERVICE_ID + " [" + serviceID + "] is not currently JMX managed");
-        } else {
+        long serviceID = (Long) reference.getProperty(Constants.SERVICE_ID);
+        if (trackedId.compareAndSet(serviceID, 0)) {
             logger.log(LogService.LOG_INFO, "Unregistering MBean with ObjectName [" + getName() + "] for service with "
                     + Constants.SERVICE_ID + " [" + serviceID + "]"); 
-            ExecutorService executor = agentContext.getRegistrationExecutor();
-            executor.submit(new Runnable() {
-                public void run() {
-                    agentContext.unregisterMBean(getName());
-                }
-            });
-            trackedId = null;
+            agentContext.unregisterMBean(AbstractCompendiumHandler.this);
             context.ungetService(reference);
+        } else {
+            String serviceDescription = getServiceDescription(reference);
+            logger.log(LogService.LOG_WARNING, "ServiceReference for [" + serviceDescription + "] with "
+                    + Constants.SERVICE_ID + " [" + serviceID + "] is not currently JMX managed");
         }
+    }
+
+    private String getServiceDescription(ServiceReference reference) {
+        String serviceDescription = (String) reference.getProperty(Constants.SERVICE_DESCRIPTION);
+        if (serviceDescription == null) {
+            Object obj = reference.getProperty(Constants.OBJECTCLASS);
+            if (obj instanceof String[]) {
+                StringBuilder sb = new StringBuilder();
+                for (String s : (String[]) obj) {
+                    if (sb.length() > 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(s);
+                }
+                serviceDescription = sb.toString();
+            } else {
+                serviceDescription = obj.toString();
+            }
+        }
+        return serviceDescription;
     }
 
     /**
@@ -143,4 +151,16 @@ public abstract class AbstractCompendiumHandler extends ServiceTracker implement
      */
     protected abstract StandardMBean constructInjectMBean(Object targetService);
 
+    /**
+     * The base name of the MBean. Will be expanded with the framework name and the UUID.
+     * @return
+     */
+    protected abstract String getBaseName();
+
+    /**
+     * @see org.apache.aries.jmx.MBeanHandler#getName()
+     */
+    public String getName() {
+        return ObjectNameUtils.createFullObjectName(context, getBaseName());
+    }
 }

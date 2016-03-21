@@ -17,238 +17,197 @@
 package org.apache.aries.jmx;
 
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
-import static org.ops4j.pax.exam.CoreOptions.options;
-import static org.ops4j.pax.exam.CoreOptions.wrappedBundle;
-import static org.ops4j.pax.exam.OptionUtils.combine;
+import static org.ops4j.pax.exam.CoreOptions.composite;
+import static org.ops4j.pax.exam.CoreOptions.junitBundles;
+import static org.ops4j.pax.exam.CoreOptions.mavenBundle;
+import static org.ops4j.pax.exam.CoreOptions.provision;
+import static org.ops4j.pax.exam.CoreOptions.streamBundle;
+import static org.ops4j.pax.exam.CoreOptions.systemProperty;
+import static org.ops4j.pax.exam.CoreOptions.vmOption;
+import static org.ops4j.pax.exam.CoreOptions.when;
+import static org.ops4j.pax.tinybundles.core.TinyBundles.bundle;
+import static org.ops4j.pax.tinybundles.core.TinyBundles.withBnd;
 
-import java.util.Collection;
-import java.util.Dictionary;
-import java.util.Enumeration;
-import java.util.LinkedList;
-import java.util.List;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+import java.util.Set;
 
-import javax.management.InstanceNotFoundException;
+import javax.inject.Inject;
 import javax.management.MBeanServer;
-import javax.management.MBeanServerFactory;
 import javax.management.MBeanServerInvocationHandler;
 import javax.management.ObjectName;
 
-import org.junit.After;
-import org.junit.Before;
+import org.apache.aries.jmx.test.MbeanServerActivator;
 import org.junit.runner.RunWith;
-import org.ops4j.pax.exam.CoreOptions;
-import org.ops4j.pax.exam.Inject;
 import org.ops4j.pax.exam.Option;
-import org.ops4j.pax.exam.junit.JUnit4TestRunner;
+import org.ops4j.pax.exam.junit.PaxExam;
 import org.ops4j.pax.exam.options.MavenArtifactProvisionOption;
+import org.ops4j.pax.exam.spi.reactors.ExamReactorStrategy;
+import org.ops4j.pax.exam.spi.reactors.PerClass;
 import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
-import org.osgi.framework.Filter;
-import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.ServiceReference;
-import org.osgi.framework.ServiceRegistration;
-import org.osgi.framework.Version;
-import org.osgi.util.tracker.ServiceTracker;
 
 /**
- * 
- * 
- *
  * @version $Rev$ $Date$
  */
-@RunWith(JUnit4TestRunner.class)
-public class AbstractIntegrationTest {
+@RunWith(PaxExam.class)
+@ExamReactorStrategy(PerClass.class)
+public abstract class AbstractIntegrationTest extends org.apache.aries.itest.AbstractIntegrationTest {
+    protected ServiceReference reference;
     
-    public static final long DEFAULT_TIMEOUT = 60000;
-
-    ServiceRegistration registration;
-    ServiceReference reference;
+    @Inject
     protected MBeanServer mbeanServer;
 
-    @Inject
-    protected BundleContext bundleContext;
-    
-    @Before
-    public void setUp() throws Exception {
-        mbeanServer = MBeanServerFactory.createMBeanServer();
-
-        registration = bundleContext.registerService(MBeanServer.class
-                .getCanonicalName(), mbeanServer, null);
-            
-        String key = MBeanServer.class.getCanonicalName();
-        System.out.println(key);
-
-        reference = bundleContext.getServiceReference(key);
-        assertNotNull(reference);
-        MBeanServer mbeanService = (MBeanServer) bundleContext.getService(reference);
-        assertNotNull(mbeanService);
-        
-        doSetUp();
-    }
-    
-    /**
-     * A hook for subclasses.
-     * 
-     * @throws Exception
-     */
-    protected void doSetUp() throws Exception {           
-    }
-    
-    @After
-    public void tearDown() throws Exception {
-        bundleContext.ungetService(reference);
-        //plainRegistration.unregister();
-    }
-    
-    protected void waitForMBean(ObjectName name) throws Exception {
-        waitForMBean(name, 10);        
-    }
-    
-    protected void waitForMBean(ObjectName name, int timeoutInSeconds) throws Exception {
-        int i=0;
-        while (true) {
-            try {
-                mbeanServer.getObjectInstance(name);
-                break;
-            } catch (InstanceNotFoundException e) {
-                if (i == timeoutInSeconds) {
-                    throw new Exception(name + " mbean is not available after waiting " + timeoutInSeconds + " seconds");
-                }
-            }
-            i++;
-            Thread.sleep(1000);
+	public Option baseOptions() {
+        String localRepo = System.getProperty("maven.repo.local");
+        if (localRepo == null) {
+            localRepo = System.getProperty("org.ops4j.pax.url.mvn.localRepository");
         }
+        return composite(
+                junitBundles(),
+                // this is how you set the default log level when using pax
+                // logging (logProfile)
+                systemProperty("org.ops4j.pax.logging.DefaultServiceLog.level").value("INFO"),
+                when(localRepo != null).useOptions(vmOption("-Dorg.ops4j.pax.url.mvn.localRepository=" + localRepo))
+         );
     }
+
+	protected Option jmxRuntime() {
+		return composite(
+				baseOptions(),
+				mavenBundle("org.osgi", "org.osgi.compendium").versionAsInProject(),
+				mavenBundle("org.apache.aries", "org.apache.aries.util").versionAsInProject(),
+				mavenBundle("org.apache.felix", "org.apache.felix.configadmin").versionAsInProject(),
+                mavenBundle("org.apache.aries.jmx", "org.apache.aries.jmx").versionAsInProject(),
+                mavenBundle("org.apache.aries.jmx", "org.apache.aries.jmx.core.whiteboard").versionAsInProject(),
+				mavenBundle("org.apache.aries.jmx", "org.apache.aries.jmx.api").versionAsInProject(),
+				mavenBundle("org.apache.aries.jmx", "org.apache.aries.jmx.whiteboard").versionAsInProject(),
+				mavenBundle("org.apache.aries.testsupport", "org.apache.aries.testsupport.unit").versionAsInProject(),
+				mbeanServerBundle()
+				);
+	}
+
+	protected Option mbeanServerBundle() {
+		return provision(bundle()
+		        .add(MbeanServerActivator.class)
+		        .set(Constants.BUNDLE_ACTIVATOR, MbeanServerActivator.class.getName())
+		        .build(withBnd()));
+	}
+	
+	protected Option bundlea() {
+		return provision(bundle()
+		        .add(org.apache.aries.jmx.test.bundlea.Activator.class)
+		        .add(org.apache.aries.jmx.test.bundlea.api.InterfaceA.class)
+		        .add(org.apache.aries.jmx.test.bundlea.impl.A.class)
+		        .set(Constants.BUNDLE_SYMBOLICNAME, "org.apache.aries.jmx.test.bundlea")
+		        .set(Constants.BUNDLE_VERSION, "2.0.0")
+		        .set(Constants.EXPORT_PACKAGE, "org.apache.aries.jmx.test.bundlea.api;version=2.0.0")
+		        .set(Constants.IMPORT_PACKAGE,
+		                "org.osgi.framework;version=1.5.0,org.osgi.util.tracker,org.apache.aries.jmx.test.bundleb.api;version=1.1.0;resolution:=optional" +
+		                ",org.osgi.service.cm")
+		        .set(Constants.BUNDLE_ACTIVATOR,
+		                org.apache.aries.jmx.test.bundlea.Activator.class.getName())
+		        .build(withBnd()));
+	}
     
-    @SuppressWarnings("unchecked")
-    protected <T> T getMBean(String name, Class<T> type) {
-        ObjectName objectName = null;
+	protected Option bundleb() {
+		return provision(bundle()
+		        .add(org.apache.aries.jmx.test.bundleb.Activator.class)
+		        .add(org.apache.aries.jmx.test.bundleb.api.InterfaceB.class)
+		        .add(org.apache.aries.jmx.test.bundleb.api.MSF.class)
+		        .add(org.apache.aries.jmx.test.bundleb.impl.B.class)
+		        .set(Constants.BUNDLE_SYMBOLICNAME,"org.apache.aries.jmx.test.bundleb")
+		        .set(Constants.BUNDLE_VERSION, "1.0.0")
+		        .set(Constants.EXPORT_PACKAGE,"org.apache.aries.jmx.test.bundleb.api;version=1.1.0")
+		        .set(Constants.IMPORT_PACKAGE,"org.osgi.framework;version=1.5.0,org.osgi.util.tracker," +
+		        		"org.osgi.service.cm,org.apache.aries.jmx.test.fragmentc")
+		        .set(Constants.BUNDLE_ACTIVATOR,
+		                org.apache.aries.jmx.test.bundleb.Activator.class.getName())
+		        .build(withBnd()));
+	}
+    
+	protected Option fragmentc() {
+		return streamBundle(bundle()
+		        .add(org.apache.aries.jmx.test.fragmentc.C.class)
+		        .set(Constants.BUNDLE_SYMBOLICNAME, "org.apache.aries.jmx.test.fragc")
+		        .set(Constants.FRAGMENT_HOST, "org.apache.aries.jmx.test.bundlea")
+		        .set(Constants.EXPORT_PACKAGE, "org.apache.aries.jmx.test.fragmentc")
+		        .build(withBnd())).noStart();
+	}
+	
+	protected Option bundled() {
+		return provision(bundle()
+		        .set(Constants.BUNDLE_SYMBOLICNAME, "org.apache.aries.jmx.test.bundled")
+		        .set(Constants.BUNDLE_VERSION, "3.0.0")
+		        .set(Constants.REQUIRE_BUNDLE, "org.apache.aries.jmx.test.bundlea;bundle-version=2.0.0")
+		        .build(withBnd()));
+	}
+	
+	protected Option bundlee() {
+		return provision(bundle()
+		        .set(Constants.BUNDLE_SYMBOLICNAME, "org.apache.aries.jmx.test.bundlee")
+		        .set(Constants.BUNDLE_DESCRIPTION, "%desc")
+		        .add("OSGI-INF/l10n/bundle.properties", getBundleProps("desc", "Description"))
+		        .add("OSGI-INF/l10n/bundle_nl.properties", getBundleProps("desc", "Omschrijving"))
+		        .build(withBnd()));
+	}
+
+    private InputStream getBundleProps(String key, String value) {
         try {
-            objectName = new ObjectName(name);
-        } catch (Exception e) {
-            fail(e.toString());
-        }
-        assertNotNull(mbeanServer);
-        assertNotNull(objectName);
-        T mbean = (T) MBeanServerInvocationHandler.newProxyInstance(mbeanServer, objectName,
-                type, false);
-        return mbean;
-    }
-    
-    protected Bundle getBundle(String symbolicName) {
-        return getBundle(symbolicName, null);
-    }
-    
-    protected Bundle getBundle(String bundleSymbolicName, String version) {
-        Bundle result = null;
-        for (Bundle b : bundleContext.getBundles()) {
-            if ( b.getSymbolicName().equals(bundleSymbolicName) ) {
-                if (version == null || b.getVersion().equals(Version.parseVersion(version))) {
-                    result = b;
-                    break;
-                }
-            }
-        }
-        return result;
-    }
-    
-    protected <T> T getOsgiService(Class<T> type, long timeout) {
-        return getOsgiService(type, null, timeout);
-    }
-
-    protected <T> T getOsgiService(Class<T> type) {
-        return getOsgiService(type, null, DEFAULT_TIMEOUT);
-    }
-
-    protected <T> T getOsgiService(Class<T> type, String filter, long timeout) {
-        ServiceTracker tracker = null;
-        try {
-            String flt;
-            if (filter != null) {
-                if (filter.startsWith("(")) {
-                    flt = "(&(" + Constants.OBJECTCLASS + "=" + type.getName() + ")" + filter + ")";
-                } else {
-                    flt = "(&(" + Constants.OBJECTCLASS + "=" + type.getName() + ")(" + filter + "))";
-                }
-            } else {
-                flt = "(" + Constants.OBJECTCLASS + "=" + type.getName() + ")";
-            }
-            Filter osgiFilter = FrameworkUtil.createFilter(flt);
-            tracker = new ServiceTracker(bundleContext, osgiFilter, null);
-            tracker.open(true);
-            // Note that the tracker is not closed to keep the reference
-            // This is buggy, as the service reference may change i think
-            Object svc = type.cast(tracker.waitForService(timeout));
-            if (svc == null) {
-                Dictionary dic = bundleContext.getBundle().getHeaders();
-                System.err.println("Test bundle headers: " + explode(dic));
-
-                for (ServiceReference ref : asCollection(bundleContext.getAllServiceReferences(null, null))) {
-                    System.err.println("ServiceReference: " + ref);
-                }
-
-                for (ServiceReference ref : asCollection(bundleContext.getAllServiceReferences(null, flt))) {
-                    System.err.println("Filtered ServiceReference: " + ref);
-                }
-
-                throw new RuntimeException("Gave up waiting for service " + flt);
-            }
-            return type.cast(svc);
-        } catch (InvalidSyntaxException e) {
-            throw new IllegalArgumentException("Invalid filter", e);
-        } catch (InterruptedException e) {
+            Properties p = new Properties();
+            p.put(key, value);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            p.store(baos, "");
+            return new ByteArrayInputStream(baos.toByteArray());
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
-
-    public static MavenArtifactProvisionOption mavenBundle(String groupId, String artifactId) {
-        return CoreOptions.mavenBundle().groupId(groupId).artifactId(artifactId).versionAsInProject();
+	
+    protected ObjectName waitForMBean(String name) {
+        return waitForMBean(name, 20);
     }
 
-    protected static Option[] updateOptions(Option[] options) {
-        // We need to add pax-exam-junit here when running with the ibm
-        // jdk to avoid the following exception during the test run:
-        // ClassNotFoundException: org.ops4j.pax.exam.junit.Configuration
-        if ("IBM Corporation".equals(System.getProperty("java.vendor"))) {
-            Option[] ibmOptions = options(
-                wrappedBundle(mavenBundle("org.ops4j.pax.exam", "pax-exam-junit"))
-            );
-            options = combine(ibmOptions, options);
+    protected ObjectName waitForMBean(String name, int timeoutInSeconds) {
+        int i=0;
+        while (true) {
+            ObjectName queryName;
+			try {
+				queryName = new ObjectName(name.toString() + ",*");
+			} catch (Exception e) {
+				throw new IllegalArgumentException("Invalid name " + name, e);
+			}
+            Set<ObjectName> result = mbeanServer.queryNames(queryName, null);
+            if (result.size() > 0)
+                return result.iterator().next();
+
+            if (i == timeoutInSeconds * 10)
+                throw new RuntimeException(name + " mbean is not available after waiting " + timeoutInSeconds + " seconds");
+
+            i++;
+            try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+			}
         }
-
-        return options;
     }
 
-    /*
-     * Explode the dictionary into a ,-delimited list of key=value pairs
-     */
-    private static String explode(Dictionary dictionary) {
-        Enumeration keys = dictionary.keys();
-        StringBuffer result = new StringBuffer();
-        while (keys.hasMoreElements()) {
-            Object key = keys.nextElement();
-            result.append(String.format("%s=%s", key, dictionary.get(key)));
-            if (keys.hasMoreElements()) {
-                result.append(", ");
-            }
-        }
-        return result.toString();
+    protected <T> T getMBean(String name, Class<T> type) {
+        ObjectName objectName = waitForMBean(name);
+        return getMBean(objectName, type);
     }
 
-    /*
-     * Provides an iterable collection of references, even if the original array is null
-     */
-    private static final Collection<ServiceReference> asCollection(ServiceReference[] references) {
-        List<ServiceReference> result = new LinkedList<ServiceReference>();
-        if (references != null) {
-            for (ServiceReference reference : references) {
-                result.add(reference);
-            }
-        }
-        return result;
+    protected <T> T getMBean(ObjectName objectName, Class<T> type) {
+        return MBeanServerInvocationHandler.newProxyInstance(mbeanServer, objectName, type, false);
     }
-
+    
+    protected Bundle getBundleByName(String symName) {
+    	Bundle b = context().getBundleByName(symName);
+        assertNotNull("Bundle " + symName + "should be installed", b);
+        return b;
+    }
 }

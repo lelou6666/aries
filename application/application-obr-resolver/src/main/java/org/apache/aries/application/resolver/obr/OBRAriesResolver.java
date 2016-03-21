@@ -35,7 +35,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,7 +42,6 @@ import java.util.Set;
 import org.apache.aries.application.ApplicationMetadata;
 import org.apache.aries.application.Content;
 import org.apache.aries.application.InvalidAttributeException;
-import org.apache.aries.application.VersionRange;
 import org.apache.aries.application.management.AriesApplication;
 import org.apache.aries.application.management.BundleInfo;
 import org.apache.aries.application.management.ResolveConstraint;
@@ -56,15 +54,16 @@ import org.apache.aries.application.modelling.ModellingConstants;
 import org.apache.aries.application.modelling.ModellingManager;
 import org.apache.aries.application.modelling.utils.ModellingHelper;
 import org.apache.aries.application.resolver.internal.MessageUtil;
+import org.apache.aries.application.resolver.obr.ext.ModelledBundleResource;
 import org.apache.aries.application.resolver.obr.impl.ApplicationResourceImpl;
-import org.apache.aries.application.resolver.obr.impl.ModelledBundleResource;
 import org.apache.aries.application.resolver.obr.impl.OBRBundleInfo;
 import org.apache.aries.application.resolver.obr.impl.RepositoryGeneratorImpl;
 import org.apache.aries.application.resolver.obr.impl.ResourceWrapper;
 import org.apache.aries.application.utils.AppConstants;
-import org.apache.aries.application.utils.filesystem.IOUtils;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor.NameValueMap;
+import org.apache.aries.application.utils.manifest.ContentFactory;
+import org.apache.aries.util.VersionRange;
+import org.apache.aries.util.io.IOUtils;
+import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.apache.felix.bundlerepository.Capability;
 import org.apache.felix.bundlerepository.DataModelHelper;
 import org.apache.felix.bundlerepository.Reason;
@@ -130,13 +129,6 @@ public class OBRAriesResolver implements AriesApplicationResolver
     return returnOptionalResources;
   }
   
-	public Collection<ModelledResource> resolve(String appName,
-			String appVersion, Collection<ModelledResource> byValueBundles,
-			Collection<Content> inputs) throws ResolverException {
-		return resolve(appName, appVersion, byValueBundles,
-				inputs, this.platformRepository);
-	}
-
 /**
    * Resolve a list of resources from the OBR bundle repositories by OBR
    * resolver.
@@ -151,83 +143,92 @@ public class OBRAriesResolver implements AriesApplicationResolver
    */
   @Override
   public Collection<ModelledResource> resolve(String appName, String appVersion,
-			Collection<ModelledResource> byValueBundles, Collection<Content> inputs, PlatformRepository platformRepository)
+			Collection<ModelledResource> byValueBundles, Collection<Content> inputs)
 			throws ResolverException {
-     log.debug(LOG_ENTRY, "resolve", new Object[]{appName, appVersion,byValueBundles, inputs});
+      
+    log.debug(LOG_ENTRY, "resolve", new Object[]{appName, appVersion,byValueBundles, inputs});
     Collection<ImportedBundle> importedBundles = toImportedBundle(inputs);
-    Collection<ModelledResource> toReturn = new ArrayList<ModelledResource>();
     
-    Resolver obrResolver = getConfiguredObrResolver(appName, appVersion, byValueBundles, platformRepository);
+    Resolver obrResolver = getConfiguredObrResolver(appName, appVersion, byValueBundles, false);
     // add a resource describing the requirements of the application metadata.
     obrResolver.add(createApplicationResource( appName, appVersion, importedBundles));
     
-    if (obrResolver.resolve()) {
-      
-      List<Resource> requiredResources = retrieveRequiredResources(obrResolver);
-
-      if (requiredResources == null) {
-        log.debug("resolver.getRequiredResources() returned null");
-      } else {
-
-        for (Resource r : requiredResources) {
-          NameValueMap<String, String> attribs = new NameValueMap<String, String>();
-          attribs.put(Constants.VERSION_ATTRIBUTE, "[" + r.getVersion() + ',' + r.getVersion()
-              + "]");
-          ModelledResource modelledResourceForThisMatch = null; 
-          // OBR may give us back the global capabilities. Typically these do not have a bundle symbolic name - they're a 
-          // list of packages available in the target runtime environment. If the resource has no symbolic name, we can ignore it
-          if (r.getSymbolicName() != null) { 
-            try { 
-              modelledResourceForThisMatch = new ModelledBundleResource (r, modellingManager, modellingHelper);
-            } catch (InvalidAttributeException iax) { 
-              
-              ResolverException re = new ResolverException("Internal error occurred: " + iax.toString());
-              log.debug(LOG_EXIT, "resolve", re);
-              
-              throw re;
-            }
-            toReturn.add(modelledResourceForThisMatch);
-          }
-        }
-      }
-      log.debug(LOG_EXIT, "resolve", toReturn); 
-      return toReturn;
-    } else {
-      Reason[] reasons = obrResolver.getUnsatisfiedRequirements();
-      // let's refine the list by removing the indirect unsatisfied bundles that are caused by unsatisfied packages or other bundles
-      Map<String,Set<String>> refinedReqs = refineUnsatisfiedRequirements(obrResolver, reasons);
-      StringBuffer reqList = new StringBuffer();
-      List<String> unsatisfiedRequirements = new LinkedList<String>();
-
-      for (Map.Entry<String, Set<String>> filterEntry : refinedReqs.entrySet()) {
-        log.debug("unable to satisfy the filter , filter = " + filterEntry.getKey() + "required by "+filterEntry.getValue());
-       
-        String reason = extractConsumableMessageInfo(filterEntry.getKey(),filterEntry.getValue());
-
-        reqList.append('\n');
-        reqList.append(reason);
-        unsatisfiedRequirements.add(reason);
-      }
-
-      ResolverException re = new ResolverException(MessageUtil.getMessage("RESOLVER_UNABLE_TO_RESOLVE", 
-          new Object[] { appName, reqList }));
-      re.setUnsatisfiedRequirements(unsatisfiedRequirements);
-      log.debug(LOG_EXIT, "resolve", re);
-      
-      throw re;
-    }
-    
+    log.debug(LOG_EXIT, "resolve");
+    return doResolve(obrResolver, appName);    
   }
+  
+  private Collection<ModelledResource> doResolve(Resolver obrResolver, String appName) throws ResolverException
+  {
+      log.debug(LOG_ENTRY, "doResolve");
+      Collection<ModelledResource> toReturn = new ArrayList<ModelledResource>();
 
-  private Resolver getConfiguredObrResolver(String appName, String appVersion,
-	      Collection<ModelledResource> byValueBundles) throws ResolverException
-	      {
-	 
-	  return getConfiguredObrResolver(appName, appVersion, byValueBundles, platformRepository);
-	      }
+      if (obrResolver.resolve()) {
+          
+          List<Resource> requiredResources = retrieveRequiredResources(obrResolver);
 
+          if (requiredResources == null) {
+            log.debug("resolver.getRequiredResources() returned null");
+          } else {
+
+            for (Resource r : requiredResources) {
+              Map<String, String> attribs = new HashMap<String, String>();
+              attribs.put(Constants.VERSION_ATTRIBUTE, "[" + r.getVersion() + ',' + r.getVersion() + "]");
+              ModelledResource modelledResourceForThisMatch = null; 
+              // OBR may give us back the global capabilities. Typically these do not have a bundle symbolic name - they're a 
+              // list of packages available in the target runtime environment. If the resource has no symbolic name, we can ignore it
+              if (r.getSymbolicName() != null) { 
+                try { 
+                  modelledResourceForThisMatch = new ModelledBundleResource (r, modellingManager, modellingHelper);
+                } catch (InvalidAttributeException iax) { 
+                  ResolverException re = new ResolverException("Internal error occurred: " + iax);
+                  log.debug(LOG_EXIT, "doResolve", re);
+                  throw re;
+                }
+                toReturn.add(modelledResourceForThisMatch);
+              }
+            }
+          }
+          log.debug(LOG_EXIT, toReturn);
+          return toReturn;
+        } else {
+          Reason[] reasons = obrResolver.getUnsatisfiedRequirements();
+          // let's refine the list by removing the indirect unsatisfied bundles that are caused by unsatisfied packages or other bundles
+          Map<String,Set<String>> refinedReqs = refineUnsatisfiedRequirements(obrResolver, reasons);
+          StringBuffer reqList = new StringBuffer();
+          Map<String, String> unsatisfiedRequirements = extractConsumableMessageInfo(refinedReqs);
+
+          for (String reason : unsatisfiedRequirements.keySet()) {
+            reqList.append('\n');
+            reqList.append(reason);
+          }
+
+          ResolverException re = new ResolverException(MessageUtil.getMessage("RESOLVER_UNABLE_TO_RESOLVE", new Object[] { appName, reqList }));
+          re.setUnsatisfiedRequirementsAndReasons(unsatisfiedRequirements);
+
+          log.debug(LOG_EXIT, "doResolve", re);
+          throw re;
+        }
+  }
+  
+
+  @Override
+  public Collection<ModelledResource> resolveInIsolation(String appName,
+          String appVersion, Collection<ModelledResource> byValueBundles,
+          Collection<Content> inputs) throws ResolverException {
+      
+      log.debug(LOG_ENTRY, "resolve", new Object[]{appName, appVersion,byValueBundles, inputs});
+      Collection<ImportedBundle> importedBundles = toImportedBundle(inputs);
+      
+      Resolver obrResolver = getConfiguredObrResolver(appName, appVersion, byValueBundles, true);
+      // add a resource describing the requirements of the application metadata.
+      obrResolver.add(createApplicationResource( appName, appVersion, importedBundles));
+      
+      log.debug(LOG_EXIT, "resolve");
+      return doResolve(obrResolver, appName);   
+  }  
+  
   private Resolver getConfiguredObrResolver(String appName, String appVersion,
-      Collection<ModelledResource> byValueBundles, PlatformRepository platformRepository) throws ResolverException
+      Collection<ModelledResource> byValueBundles, boolean noExtraRepositories) throws ResolverException
   {
     log.debug(LOG_ENTRY, "getConfiguredObrResolver", new Object[]{appName, appVersion,byValueBundles });
     DataModelHelper helper = repositoryAdmin.getHelper();
@@ -243,18 +244,23 @@ public class OBRAriesResolver implements AriesApplicationResolver
     List<Repository> resolveRepos = new ArrayList<Repository>();
     // add system repository
     resolveRepos.add(repositoryAdmin.getSystemRepository());
-    // add local repository if configured
-    if (!(excludeLocalRuntime())) {
-      resolveRepos.add(getLocalRepository(repositoryAdmin));
-    }
+
     // add application repository
     resolveRepos.add(appRepo);
-    // Need to refresh the repositories added to repository admin 
-    // add user-defined repositories
-    Repository[] repos = repositoryAdmin.listRepositories();
-    for (Repository r : repos) {
-      resolveRepos.add(r);      
-    }     
+    
+    if (!!!noExtraRepositories) {
+        // add local repository if configured
+        if (!(excludeLocalRuntime())) {
+          resolveRepos.add(getLocalRepository(repositoryAdmin));
+        }
+        // Need to refresh the repositories added to repository admin 
+        // add user-defined repositories
+        Repository[] repos = repositoryAdmin.listRepositories();
+        for (Repository r : repos) {
+          resolveRepos.add(r);      
+        }     
+    }
+
     Resolver obrResolver = repositoryAdmin.resolver(resolveRepos.toArray(new Repository[resolveRepos.size()]));
     addPlatformRepositories (obrResolver, appName, platformRepository);
     log.debug(LOG_EXIT, "getConfiguredObrResolver", obrResolver);
@@ -279,11 +285,11 @@ public class OBRAriesResolver implements AriesApplicationResolver
     contents.addAll(useBundleContent);
     if ((constraints != null ) && (constraints.length > 0 )) {
       for (ResolveConstraint con: constraints) {
-        contents.add(ManifestHeaderProcessor.parseContent(con.getBundleName(), con.getVersionRange().toString()));
+        contents.add(ContentFactory.parseContent(con.getBundleName(), con.getVersionRange().toString()));
       }
     }
 
-    Resolver obrResolver = getConfiguredObrResolver(appName, appVersion.toString(), toModelledResource(app.getBundleInfo()));
+    Resolver obrResolver = getConfiguredObrResolver(appName, appVersion.toString(), toModelledResource(app.getBundleInfo()), false);
     // add a resource describing the requirements of the application metadata.
     obrResolver.add(createApplicationResource( appName, appVersion, contents));
     if (obrResolver.resolve()) {
@@ -307,21 +313,16 @@ public class OBRAriesResolver implements AriesApplicationResolver
       //refine the list by removing the indirect unsatisfied bundles that are caused by unsatisfied packages or other bundles
       Map<String,Set<String>> refinedReqs = refineUnsatisfiedRequirements(obrResolver, reasons);
       StringBuffer reqList = new StringBuffer();
-      List<String> unsatisfiedRequirements = new LinkedList<String>();
+      Map<String, String> unsatisfiedRequirements = extractConsumableMessageInfo(refinedReqs);
 
-      for (Map.Entry<String, Set<String>> filterEntry : refinedReqs.entrySet()) {
-        log.debug("unable to satisfied the filter , filter = " + filterEntry.getKey() + "required by "+filterEntry.getValue());
-       
-        String reason = extractConsumableMessageInfo(filterEntry.getKey(),filterEntry.getValue());
-
+      for (String reason : unsatisfiedRequirements.keySet()) {
         reqList.append('\n');
         reqList.append(reason);
-        unsatisfiedRequirements.add(reason);
       }
 
       ResolverException re = new ResolverException(MessageUtil.getMessage("RESOLVER_UNABLE_TO_RESOLVE", 
           new Object[] { app.getApplicationMetadata().getApplicationName(), reqList }));
-      re.setUnsatisfiedRequirements(unsatisfiedRequirements);
+      re.setUnsatisfiedRequirementsAndReasons(unsatisfiedRequirements);
       log.debug(LOG_EXIT, "resolve", re);
       
       throw re;
@@ -530,71 +531,92 @@ public class OBRAriesResolver implements AriesApplicationResolver
    * @param bundlesFailing For problems with a bundle, the set of bundles that have a problem
    * @return human readable form
    */
-  private String extractConsumableMessageInfo(String filter, Set<String> bundlesFailing)
-  {
-    log.debug(LOG_ENTRY, "extractConsumableMessageInfo", new Object[] {filter, bundlesFailing});
-    
-    Map<String, String> attrs = ManifestHeaderProcessor.parseFilter(filter);
-    Map<String, String> customAttrs = new HashMap<String, String>();
-    for (Map.Entry<String, String> e : attrs.entrySet()) {
-      if (!SPECIAL_FILTER_ATTRS.contains(e.getKey())) {
-        customAttrs.put(e.getKey(), e.getValue());
-      }
-    }
+  private Map<String, String> extractConsumableMessageInfo(
+      Map<String, Set<String>> refinedReqs) {
+    log.debug(LOG_ENTRY, "extractConsumableMessageInfo", refinedReqs);
 
-    StringBuilder msgKey = new StringBuilder();
-    List<Object> inserts = new ArrayList<Object>();
+    Map<String, String> unsatisfiedRequirements = new HashMap<String, String>();
 
-    boolean unknownType = false;
-    if (attrs.containsKey(ModellingConstants.OBR_PACKAGE)) {
-      msgKey.append("RESOLVER_UNABLE_TO_RESOLVE_PACKAGE");
-      inserts.add(attrs.get(ModellingConstants.OBR_PACKAGE));
-    } else if (attrs.containsKey(ModellingConstants.OBR_SYMBOLIC_NAME)) {
-      msgKey.append("RESOLVER_UNABLE_TO_RESOLVE_BUNDLE");
-      inserts.add(attrs.get(ModellingConstants.OBR_SYMBOLIC_NAME));
-    } else if (attrs.containsKey(ModellingConstants.OBR_SERVICE)) {
-      msgKey.append("RESOLVER_UNABLE_TO_RESOLVE_SERVICE");
-      //No insert for service name as the name must be "*" to match any Service capability
-    } else {
-      unknownType = true;
-      msgKey.append("RESOLVER_UNABLE_TO_RESOLVE_FILTER");
-      inserts.add(filter);
-    }
+    for (Map.Entry<String, Set<String>> filterEntry : refinedReqs.entrySet()) {
 
-    if (bundlesFailing != null && bundlesFailing.size() != 0) {
-      msgKey.append("_REQUIRED_BY_BUNDLE");
-      if (bundlesFailing.size() == 1)
-        inserts.add(bundlesFailing.iterator().next()); // Just take the string if there's only one of them
-      else
-        inserts.add(bundlesFailing.toString()); // Add the whole set if there isn't exactly one
-    }
-    if (!unknownType && !customAttrs.isEmpty()) {
-      msgKey.append("_WITH_ATTRS");
-      inserts.add(customAttrs);
-    }
+      String filter = filterEntry.getKey();
+      Set<String> bundlesFailing = filterEntry.getValue();
 
-    if (!unknownType && attrs.containsKey(Constants.VERSION_ATTRIBUTE)) {
-      msgKey.append("_WITH_VERSION");
-      VersionRange vr = ManifestHeaderProcessor.parseVersionRange(attrs
-          .get(Constants.VERSION_ATTRIBUTE));
-      inserts.add(vr.getMinimumVersion());
+      log.debug("unable to satisfy the filter , filter = "
+          + filter + "required by " + Arrays.toString(bundlesFailing.toArray()));
 
-      if (!!!vr.isExactVersion()) {
-        msgKey.append(vr.isMinimumExclusive() ? "_LOWEX" : "_LOW");
-        if (vr.getMaximumVersion() != null) {
-          msgKey.append(vr.isMaximumExclusive() ? "_UPEX" : "_UP");
-          inserts.add(vr.getMaximumVersion());
+      Map<String, String> attrs = ManifestHeaderProcessor.parseFilter(filter);
+      Map<String, String> customAttrs = new HashMap<String, String>();
+      for (Map.Entry<String, String> e : attrs.entrySet()) {
+        if (!SPECIAL_FILTER_ATTRS.contains(e.getKey())) {
+          customAttrs.put(e.getKey(), e.getValue());
         }
       }
+
+      StringBuilder msgKey = new StringBuilder();
+      List<Object> inserts = new ArrayList<Object>();
+
+      final String type;
+      boolean unknownType = false;
+      if (attrs.containsKey(ModellingConstants.OBR_PACKAGE)) {
+        type = ModellingConstants.OBR_PACKAGE;
+        msgKey.append("RESOLVER_UNABLE_TO_RESOLVE_PACKAGE");
+        inserts.add(attrs.get(ModellingConstants.OBR_PACKAGE));
+      } else if (attrs.containsKey(ModellingConstants.OBR_SYMBOLIC_NAME)) {
+        type = ModellingConstants.OBR_SYMBOLIC_NAME;
+        msgKey.append("RESOLVER_UNABLE_TO_RESOLVE_BUNDLE");
+        inserts.add(attrs.get(ModellingConstants.OBR_SYMBOLIC_NAME));
+      } else if (attrs.containsKey(ModellingConstants.OBR_SERVICE)) {
+        type = ModellingConstants.OBR_SERVICE;
+        msgKey.append("RESOLVER_UNABLE_TO_RESOLVE_SERVICE");
+        // No insert for service name as the name must be "*" to match any
+        // Service capability
+      } else {
+        type = ModellingConstants.OBR_UNKNOWN;
+        unknownType = true;
+        msgKey.append("RESOLVER_UNABLE_TO_RESOLVE_FILTER");
+        inserts.add(filter);
+      }
+
+      if (bundlesFailing != null && bundlesFailing.size() != 0) {
+        msgKey.append("_REQUIRED_BY_BUNDLE");
+        if (bundlesFailing.size() == 1)
+          inserts.add(bundlesFailing.iterator().next()); // Just take the string
+                                                         // if there's only one
+                                                         // of them
+        else
+          inserts.add(bundlesFailing.toString()); // Add the whole set if there
+                                                  // isn't exactly one
+      }
+      if (!unknownType && !customAttrs.isEmpty()) {
+        msgKey.append("_WITH_ATTRS");
+        inserts.add(customAttrs);
+      }
+
+      if (!unknownType && attrs.containsKey(Constants.VERSION_ATTRIBUTE)) {
+        msgKey.append("_WITH_VERSION");
+        VersionRange vr = ManifestHeaderProcessor.parseVersionRange(attrs
+            .get(Constants.VERSION_ATTRIBUTE));
+        inserts.add(vr.getMinimumVersion());
+
+        if (!!!vr.isExactVersion()) {
+          msgKey.append(vr.isMinimumExclusive() ? "_LOWEX" : "_LOW");
+          if (vr.getMaximumVersion() != null) {
+            msgKey.append(vr.isMaximumExclusive() ? "_UPEX" : "_UP");
+            inserts.add(vr.getMaximumVersion());
+          }
+        }
+      }
+
+      String msgKeyStr = msgKey.toString();
+
+      String msg = MessageUtil.getMessage(msgKeyStr, inserts.toArray());
+      unsatisfiedRequirements.put(msg, type);
     }
 
-    String msgKeyStr = msgKey.toString();
-    
-    String msg = MessageUtil.getMessage(msgKeyStr, inserts.toArray());
+    log.debug(LOG_EXIT, "extractConsumableMessageInfo", unsatisfiedRequirements);
 
-    log.debug(LOG_EXIT, "extractConsumableMessageInfo", msg);
-    
-    return msg;
+    return unsatisfiedRequirements;
   }
   
   /**
@@ -656,7 +678,7 @@ public class OBRAriesResolver implements AriesApplicationResolver
       log.debug(LOG_EXIT, "refineUnsatisfiedRequirements", new Object[]{result});
       
     return result;
-    }
+   }
   
  
    

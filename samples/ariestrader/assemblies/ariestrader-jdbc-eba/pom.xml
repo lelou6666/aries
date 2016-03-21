@@ -22,7 +22,11 @@
 	<parent>
 		<groupId>org.apache.aries.samples.ariestrader</groupId>
 		<artifactId>assemblies</artifactId>
+<<<<<<< HEAD
 		<version>0.3.1-SNAPSHOT</version>
+=======
+		<version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
 	</parent>
     
     <groupId>org.apache.aries.samples.ariestrader</groupId>
@@ -63,11 +67,12 @@
             <plugin>
                 <groupId>org.apache.aries</groupId>
                 <artifactId>eba-maven-plugin</artifactId>
+                <version>${ariesEbaMavenPluginVersion}</version>
                 <extensions>true</extensions>
                 <configuration>
                     <generateManifest>true</generateManifest>
                     <instructions>
-                        <Application-SymbolicName>${pom.artifactId}</Application-SymbolicName>
+                        <Application-SymbolicName>${project.artifactId}</Application-SymbolicName>
                     </instructions>
                 </configuration>
             </plugin>

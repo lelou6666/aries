@@ -18,11 +18,20 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
+<<<<<<< HEAD
         <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
         <artifactId>helloworld</artifactId>
         <version>0.3.1-SNAPSHOT</version>
     </parent>
 
+=======
+        <groupId>org.apache.aries.samples</groupId>
+        <artifactId>helloworld</artifactId>
+        <version>1.0.1-SNAPSHOT</version>
+    </parent>
+
+    <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
+>>>>>>> refs/remotes/apache/trunk
     <artifactId>org.apache.aries.samples.blueprint.helloworld.assembly</artifactId>
     <name>Apache Aries Blueprint HelloWorld Assembly</name>
     <packaging>pom</packaging>
@@ -32,16 +41,28 @@
         <dependency>
             <groupId>org.eclipse</groupId>
             <artifactId>osgi</artifactId>
+<<<<<<< HEAD
+=======
+            <version>3.5.0.v20090520</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
 
         <dependency>
             <groupId>org.eclipse.equinox</groupId>
             <artifactId>cm</artifactId>
+<<<<<<< HEAD
+=======
+            <version>3.2.0-v20070116</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
 
         <dependency>
             <groupId>org.eclipse.osgi</groupId>
             <artifactId>services</artifactId>
+<<<<<<< HEAD
+=======
+            <version>3.1.200-v20070605</version>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
 
         <dependency>
@@ -63,6 +84,18 @@
             <groupId>org.apache.aries</groupId>
             <artifactId>org.apache.aries.util</artifactId>
         </dependency>
+<<<<<<< HEAD
+=======
+        <dependency>
+            <groupId>org.apache.aries.proxy</groupId>
+            <artifactId>org.apache.aries.proxy</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>asm</groupId>
+            <artifactId>asm-all</artifactId>
+        </dependency>
+
+>>>>>>> refs/remotes/apache/trunk
 
         <dependency>
             <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
@@ -85,6 +118,7 @@
 
         <plugins>
             <plugin>
+<<<<<<< HEAD
                   <groupId>org.apache.maven.plugins</groupId>
                   <artifactId>maven-resources-plugin</artifactId>
                   <configuration>
@@ -102,12 +136,15 @@
            </plugin>
 
             <plugin>
+=======
+>>>>>>> refs/remotes/apache/trunk
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
                 <configuration>
                     <outputDirectory>${project.build.directory}</outputDirectory>
                 </configuration>
                 <executions>
+<<<<<<< HEAD
                     <execution>
                         <id>filter</id>
                         <phase>generate-resources</phase>
@@ -116,6 +153,16 @@
                         </goals>
                     </execution>
                 </executions>
+=======
+                  <execution>
+                     <id>filter</id>
+                     <phase>generate-resources</phase>
+                     <goals>
+                        <goal>resources</goal>
+                     </goals>
+                  </execution>
+                 </executions>
+>>>>>>> refs/remotes/apache/trunk
             </plugin>
 
             <plugin>

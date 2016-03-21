@@ -24,7 +24,11 @@
 	<parent>
 		<groupId>org.apache.aries.samples.blueprint.idverifier</groupId>
 		<artifactId>idverifier</artifactId>
+<<<<<<< HEAD
 		<version>0.3.1-SNAPSHOT</version>
+=======
+		<version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
 	</parent>
 
 	<artifactId>org.apache.aries.samples.blueprint.idverifier.assembly</artifactId>
@@ -69,6 +73,14 @@
 		</dependency>
 
 		<dependency>
+<<<<<<< HEAD
+=======
+			<groupId>org.apache.aries.proxy</groupId>
+			<artifactId>org.apache.aries.proxy</artifactId>
+		</dependency>
+
+		<dependency>
+>>>>>>> refs/remotes/apache/trunk
 			<groupId>org.apache.aries.blueprint</groupId>
 			<artifactId>org.apache.aries.blueprint</artifactId>
 		</dependency>
@@ -81,6 +93,13 @@
 			<groupId>org.apache.aries.jmx</groupId>
 			<artifactId>org.apache.aries.jmx.blueprint</artifactId>
 		</dependency>
+<<<<<<< HEAD
+=======
+		<dependency>
+             <groupId>asm</groupId>
+             <artifactId>asm-all</artifactId>
+		</dependency>
+>>>>>>> refs/remotes/apache/trunk
 
 		<dependency>
 			<groupId>org.apache.aries.samples.blueprint.idverifier</groupId>

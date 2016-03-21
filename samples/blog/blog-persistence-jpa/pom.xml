@@ -21,7 +21,11 @@
 	<parent>
 		<groupId>org.apache.aries.samples.blog</groupId>
 		<artifactId>blog</artifactId>
+<<<<<<< HEAD
 		<version>0.3.1-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
 	</parent>
 
 	<groupId>org.apache.aries.samples.blog</groupId>
@@ -37,9 +41,16 @@
 				<configuration>
 					<instructions>
 						<Meta-Persistence>META-INF/persistence.xml</Meta-Persistence>
+<<<<<<< HEAD
                         <Bundle-SymbolicName>${pom.artifactId}</Bundle-SymbolicName>
 						<Private-Package>org.apache.aries.samples.blog.persistence.jpa.*</Private-Package>
                         <Export-Package>!org.apache.aries.samples.blog.persistence.jpa.*</Export-Package>
+=======
+                        <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+						<Private-Package>org.apache.aries.samples.blog.persistence.jpa.*</Private-Package>
+                        <Export-Package>!org.apache.aries.samples.blog.persistence.jpa.*</Export-Package>
+                        <Import-Package>org.apache.aries.samples.blog.api.persistence;provide:=true,*</Import-Package>
+>>>>>>> refs/remotes/apache/trunk
 					</instructions>
 				</configuration>
 			</plugin>

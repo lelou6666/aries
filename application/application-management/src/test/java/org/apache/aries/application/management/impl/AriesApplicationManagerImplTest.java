@@ -47,8 +47,6 @@ import org.apache.aries.application.DeploymentContent;
 import org.apache.aries.application.DeploymentMetadata;
 import org.apache.aries.application.DeploymentMetadataFactory;
 import org.apache.aries.application.ServiceDeclaration;
-import org.apache.aries.application.filesystem.IDirectory;
-import org.apache.aries.application.filesystem.IFile;
 import org.apache.aries.application.impl.ApplicationMetadataFactoryImpl;
 import org.apache.aries.application.impl.ContentImpl;
 import org.apache.aries.application.impl.DeploymentContentImpl;
@@ -63,7 +61,6 @@ import org.apache.aries.application.management.UpdateException;
 import org.apache.aries.application.management.spi.convert.BundleConversion;
 import org.apache.aries.application.management.spi.convert.BundleConverter;
 import org.apache.aries.application.management.spi.convert.ConversionException;
-import org.apache.aries.application.management.spi.repository.PlatformRepository;
 import org.apache.aries.application.management.spi.resolve.AriesApplicationResolver;
 import org.apache.aries.application.management.spi.resolve.DeploymentManifestManager;
 import org.apache.aries.application.management.spi.runtime.AriesApplicationContextManager;
@@ -71,13 +68,15 @@ import org.apache.aries.application.management.spi.runtime.LocalPlatform;
 import org.apache.aries.application.modelling.DeployedBundles;
 import org.apache.aries.application.modelling.ModelledResource;
 import org.apache.aries.application.utils.AppConstants;
-import org.apache.aries.application.utils.filesystem.FileSystem;
-import org.apache.aries.application.utils.filesystem.IOUtils;
 import org.apache.aries.application.utils.management.SimpleBundleInfo;
-import org.apache.aries.application.utils.manifest.BundleManifest;
 import org.apache.aries.unittest.mocks.MethodCall;
 import org.apache.aries.unittest.mocks.Skeleton;
 import org.apache.aries.unittest.utils.EbaUnitTestUtils;
+import org.apache.aries.util.filesystem.FileSystem;
+import org.apache.aries.util.filesystem.IDirectory;
+import org.apache.aries.util.filesystem.IFile;
+import org.apache.aries.util.io.IOUtils;
+import org.apache.aries.util.manifest.BundleManifest;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -186,15 +185,12 @@ public class AriesApplicationManagerImplTest {
       
       return byValueBundles;
     }
-    
-	   public Collection<ModelledResource> resolve(String appName, String appVersion,
-		       Collection<ModelledResource> byValueBundles, Collection<Content> inputs, PlatformRepository platformRepository)
-		       throws ResolverException
-		   {
-		     
-		     return byValueBundles;
-		   }
-
+    @Override
+    public Collection<ModelledResource> resolveInIsolation(String appName,
+            String appVersion, Collection<ModelledResource> byValueBundles,
+            Collection<Content> inputs) throws ResolverException {
+        return null;
+    }
   }
   
   static class DummyLocalPlatform implements LocalPlatform {

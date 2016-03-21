@@ -25,6 +25,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,11 +37,14 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.apache.aries.proxy.FinalModifierException;
 import org.apache.aries.proxy.UnableToProxyException;
+import org.apache.aries.proxy.impl.NLS;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import sun.reflect.ReflectionFactory;
 
 public class ProxySubclassGenerator
 {
@@ -68,9 +72,13 @@ public class ProxySubclassGenerator
 
   public static Class<?> getProxySubclass(Class<?> aClass) throws UnableToProxyException
   {
+    return getProxySubclass(aClass, aClass.getClassLoader());
+  }
+
+  public static Class<?> getProxySubclass(Class<?> aClass, ClassLoader loader) throws UnableToProxyException
+  {
     LOGGER.debug(Constants.LOG_ENTRY, "getProxySubclass", new Object[] { aClass });
 
-    ClassLoader loader = aClass.getClassLoader();
     // in the special case where the loader is null we use a default classloader
     // this is for subclassing java.* or javax.* packages, so that one will do
     if (loader == null) loader = defaultClassLoader;
@@ -148,18 +156,32 @@ public class ProxySubclassGenerator
   public static Object newProxySubclassInstance(Class<?> classToProxy, InvocationHandler ih)
       throws UnableToProxyException
   {
+    return newProxySubclassInstance(classToProxy, classToProxy.getClassLoader(), ih);
+  }
+
+  public static Object newProxySubclassInstance(Class<?> classToProxy, ClassLoader loader, InvocationHandler ih)
+      throws UnableToProxyException
+  {
 
     LOGGER.debug(Constants.LOG_ENTRY, "newProxySubclassInstance", new Object[] {
-        classToProxy, ih });
+        classToProxy, loader, ih });
 
     Object proxySubclassInstance = null;
     try {
-      Class<?> generatedProxySubclass = getProxySubclass(classToProxy);
+      Class<?> generatedProxySubclass = getProxySubclass(classToProxy, loader);
       LOGGER.debug("Getting the proxy subclass constructor");
-      Constructor<?> subclassConstructor = generatedProxySubclass
-          .getConstructor(new Class[] { InvocationHandler.class });
-      LOGGER.debug("Invoking the proxy subclass constructor");
-      proxySubclassInstance = subclassConstructor.newInstance(ih);
+      // Because the newer JVMs throw a VerifyError if a class attempts to in a constructor other than their superclasses constructor,
+      // and because we can't know what objects/values we need to pass into the class being proxied constructor, 
+      // we instantiate the proxy class using the ReflectionFactory.newConstructorForSerialization() method which allows us to instantiate the 
+      // proxy class without calling the proxy class' constructor. It is in fact using the java.lang.Object constructor so is in effect 
+      // doing what we were doing before.
+      ReflectionFactory factory = ReflectionFactory.getReflectionFactory();
+      Constructor<?> constr = Object.class.getConstructor();
+      Constructor<?> subclassConstructor = factory.newConstructorForSerialization(generatedProxySubclass, constr);
+      proxySubclassInstance = subclassConstructor.newInstance();
+      
+      Method setIHMethod = proxySubclassInstance.getClass().getMethod("setInvocationHandler", InvocationHandler.class);
+      setIHMethod.invoke(proxySubclassInstance, ih);
       LOGGER.debug("Invoked proxy subclass constructor");
     } catch (NoSuchMethodException nsme) {
       LOGGER.debug(Constants.LOG_EXCEPTION, nsme);
@@ -173,6 +195,10 @@ public class ProxySubclassGenerator
     } catch (IllegalAccessException iae) {
       LOGGER.debug(Constants.LOG_EXCEPTION, iae);
       throw new ProxyClassInstantiationException(classToProxy, iae);
+    } catch (VerifyError ve) {
+        LOGGER.info(NLS.MESSAGES.getMessage("no.nonprivate.noargs.constructor", classToProxy));
+        LOGGER.debug(Constants.LOG_EXCEPTION, ve);
+        throw new ProxyClassInstantiationException(classToProxy, ve);
     }
 
     LOGGER.debug(Constants.LOG_EXIT, "newProxySubclassInstance", proxySubclassInstance);
@@ -311,7 +337,8 @@ public class ProxySubclassGenerator
     // java.lang.Object first)
     while (!clazz.getName().startsWith("java.") && !clazz.getName().startsWith("javax.")) {
       for (Method m : clazz.getDeclaredMethods()) {
-        if (isFinal(m.getModifiers())) {
+        //Static finals are ok, because we won't be overriding them :)
+        if (isFinal(m.getModifiers()) && !Modifier.isStatic(m.getModifiers())) {
           finalMethods.add(m.toGenericString());
         }
       }

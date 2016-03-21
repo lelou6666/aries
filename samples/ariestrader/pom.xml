@@ -22,7 +22,11 @@
     <parent>
         <groupId>org.apache.aries.samples</groupId>
         <artifactId>samples</artifactId>
+<<<<<<< HEAD
         <version>0.3.1-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.samples.ariestrader</groupId>

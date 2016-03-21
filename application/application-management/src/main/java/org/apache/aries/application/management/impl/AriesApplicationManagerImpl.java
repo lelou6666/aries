@@ -24,6 +24,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.JarURLConnection;
 import java.net.URL;
 import java.util.Collections;
 import java.util.Dictionary;
@@ -40,8 +41,6 @@ import org.apache.aries.application.ApplicationMetadata;
 import org.apache.aries.application.ApplicationMetadataFactory;
 import org.apache.aries.application.DeploymentMetadata;
 import org.apache.aries.application.DeploymentMetadataFactory;
-import org.apache.aries.application.filesystem.IDirectory;
-import org.apache.aries.application.filesystem.IFile;
 import org.apache.aries.application.management.AriesApplication;
 import org.apache.aries.application.management.AriesApplicationContext;
 import org.apache.aries.application.management.AriesApplicationListener;
@@ -61,17 +60,20 @@ import org.apache.aries.application.management.spi.resolve.DeploymentManifestMan
 import org.apache.aries.application.management.spi.runtime.AriesApplicationContextManager;
 import org.apache.aries.application.management.spi.runtime.LocalPlatform;
 import org.apache.aries.application.utils.AppConstants;
-import org.apache.aries.application.utils.filesystem.FileSystem;
-import org.apache.aries.application.utils.filesystem.IOUtils;
 import org.apache.aries.application.utils.management.SimpleBundleInfo;
-import org.apache.aries.application.utils.manifest.BundleManifest;
 import org.apache.aries.application.utils.manifest.ManifestDefaultsInjector;
-import org.apache.aries.application.utils.manifest.ManifestProcessor;
+import org.apache.aries.util.filesystem.FileSystem;
+import org.apache.aries.util.filesystem.IDirectory;
+import org.apache.aries.util.filesystem.IFile;
+import org.apache.aries.util.io.IOUtils;
+import org.apache.aries.util.manifest.BundleManifest;
+import org.apache.aries.util.manifest.ManifestProcessor;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
 import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.ServiceException;
 import org.osgi.framework.ServiceReference;
+import org.osgi.framework.ServiceRegistration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +88,8 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
   private BundleContext _bundleContext;
 
   private DeploymentManifestManager deploymentManifestManager;
+  
+  private Map<AriesApplication, ServiceRegistration> serviceRegistrations = new HashMap<AriesApplication, ServiceRegistration>();
   
   private static final Logger _logger = LoggerFactory.getLogger("org.apache.aries.application.management.impl");
 
@@ -314,18 +318,56 @@ public class AriesApplicationManagerImpl implements AriesApplicationManager {
     if (ref == null || ref.length == 0) {
         Dictionary dict = new Hashtable();
         dict.put(BundleRepository.REPOSITORY_SCOPE, appScope);
-        _bundleContext.registerService(BundleRepository.class.getName(), 
+        ServiceRegistration serviceReg = _bundleContext.registerService(BundleRepository.class.getName(), 
             new ApplicationRepository(app), 
             dict);
+        serviceRegistrations.put(app, serviceReg);
     }
   
     AriesApplicationContext result = _applicationContextManager.getApplicationContext(app);
+    
+    // When installing bundles in the .eba file we use the jar url scheme. This results in a
+    // JarFile being held open, which is bad as on windows we cannot delete the .eba file
+    // so as a work around we open a url connection to one of the bundles in the eba and
+    // if it is a jar url we close the associated JarFile.
+    
+    Iterator<BundleInfo> bi = app.getBundleInfo().iterator();
+    
+    if (bi.hasNext()) {
+      String location = bi.next().getLocation();
+      if (location.startsWith("jar")) {
+        try {
+          URL url = new URL(location);
+          JarURLConnection urlc = (JarURLConnection) url.openConnection();
+          
+          // Make sure that we pick up the cached version rather than creating a new one
+          urlc.setUseCaches(true);
+          urlc.getJarFile().close();
+        } catch (IOException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+      }
+    }
+    
     return result;
   }
   
-  public void uninstall(AriesApplicationContext app) throws BundleException 
+  public void uninstall(AriesApplicationContext appContext) throws BundleException 
   {
-    _applicationContextManager.remove(app);
+    _applicationContextManager.remove(appContext);
+    
+    // Also unregister the service if we added one for it
+    AriesApplication app = appContext.getApplication();
+    if (app != null) {
+      ServiceRegistration reg = serviceRegistrations.remove(app);
+      if (reg != null) 
+        try {
+          reg.unregister();
+        } catch (IllegalStateException e) {
+          // Must be already unregistered - ignore
+        }
+    }
   }
 
   public void addApplicationListener(AriesApplicationListener l) {

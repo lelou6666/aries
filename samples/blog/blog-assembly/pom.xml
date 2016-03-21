@@ -20,7 +20,11 @@
 	<parent>
 		<groupId>org.apache.aries.samples.blog</groupId>
 		<artifactId>blog</artifactId>
+<<<<<<< HEAD
 		<version>0.3.1-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
 	</parent>
 
 	<artifactId>org.apache.aries.samples.blog.assembly</artifactId>
@@ -31,19 +35,21 @@
 
 		<!-- Base (JDBC) platform dependencies -->
 
-		<dependency>
-			<groupId>org.eclipse</groupId>
-			<artifactId>osgi</artifactId>
+	       <dependency>
+		    <groupId>org.eclipse.tycho</groupId>
+		    <artifactId>org.eclipse.osgi</artifactId>
 		</dependency>
 
 		<dependency>
 			<groupId>org.eclipse.equinox</groupId>
 			<artifactId>cm</artifactId>
+                        <version>3.2.0-v20070116</version>
 		</dependency>
 
 		<dependency>
 			<groupId>org.eclipse.osgi</groupId>
 			<artifactId>services</artifactId>
+                        <version>3.1.200-v20070605</version>
 		</dependency>
 
 		<dependency>
@@ -102,10 +108,10 @@
 			<artifactId>geronimo-j2ee-connector_1.5_spec</artifactId>
 		</dependency>
 
-                <dependency>
-                        <groupId>org.apache.geronimo.specs</groupId>
-                        <artifactId>geronimo-servlet_2.5_spec</artifactId>
-                </dependency>
+        <dependency>
+            <groupId>org.apache.geronimo.specs</groupId>
+            <artifactId>geronimo-servlet_2.5_spec</artifactId>
+        </dependency>
 
 		<dependency>
 			<groupId>org.apache.geronimo.components</groupId>
@@ -186,19 +192,9 @@
 			<artifactId>org.apache.aries.application.utils</artifactId>
 		</dependency>
 
- 		<dependency>
-            <groupId>org.apache.aries.application</groupId>
-            <artifactId>org.apache.aries.application.noop.platform.repo</artifactId>
-        </dependency>
-
 		<dependency>
              <groupId>org.apache.aries.application</groupId>
              <artifactId>org.apache.aries.application.default.local.platform</artifactId>            
-        </dependency>
-		
-		<dependency>
-            <groupId>org.apache.aries.application</groupId>
-            <artifactId>org.apache.aries.application.noop.postresolve.process</artifactId>
         </dependency>
 
         <dependency>
@@ -214,6 +210,11 @@
             <artifactId>org.apache.aries.application.resolver.obr</artifactId>
          </dependency>
 
+        <dependency>
+            <groupId>org.apache.aries.application</groupId>
+            <artifactId>org.apache.aries.application.resolver.noop</artifactId>
+         </dependency>
+
 		<!-- Additional (JPA persistence layer) Aries dependencies -->
 
 		<dependency>
@@ -224,7 +225,6 @@
 		<dependency>
 			<groupId>asm</groupId>
 			<artifactId>asm-all</artifactId>
-			<version>3.2</version>
 		</dependency>
 
 		<dependency>

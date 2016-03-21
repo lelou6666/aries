@@ -22,7 +22,11 @@
     <parent>
         <groupId>org.apache.aries.samples.blog</groupId>
         <artifactId>blog</artifactId>
+<<<<<<< HEAD
         <version>0.3.1-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.samples.blog</groupId>
@@ -30,6 +34,22 @@
     <name>Apache Aries blog sample persistence</name>
     <packaging>bundle</packaging>
 
+<<<<<<< HEAD
+=======
+
+    <properties>
+         <!-- Export package versions are maintained in packageinfo files -->
+         <aries.osgi.export.pkg />
+         <aries.osgi.import.pkg>
+           org.apache.aries.samples.blog.api.persistence;provide:=true,
+           *
+         </aries.osgi.import.pkg>
+         <aries.osgi.private.pkg>
+             org.apache.aries.samples.blog.persistence.jdbc.*
+         </aries.osgi.private.pkg>
+    </properties>
+
+>>>>>>> refs/remotes/apache/trunk
     <dependencies>
         <dependency>
             <groupId>org.apache.aries.samples.blog</groupId>
@@ -42,6 +62,7 @@
         </dependency>
     </dependencies>
 
+<<<<<<< HEAD
     <build>
         <plugins>
             <plugin>
@@ -57,6 +78,8 @@
             </plugin>
         </plugins>
     </build>
+=======
+>>>>>>> refs/remotes/apache/trunk
 
 </project>
 	

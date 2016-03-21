@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.aries.application.InvalidAttributeException;
-import org.apache.aries.application.VersionRange;
 import org.apache.aries.application.modelling.DeployedBundles;
 import org.apache.aries.application.modelling.ImportedBundle;
 import org.apache.aries.application.modelling.ImportedPackage;
@@ -42,8 +41,8 @@ import org.apache.aries.application.modelling.impl.ImportedBundleImpl;
 import org.apache.aries.application.modelling.impl.ImportedPackageImpl;
 import org.apache.aries.application.modelling.internal.MessageUtil;
 import org.apache.aries.application.modelling.utils.ModellingHelper;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor.NameValueMap;
+import org.apache.aries.util.VersionRange;
+import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.osgi.framework.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,26 +53,20 @@ public class ModellingHelperImpl implements ModellingHelper
   private static final  Logger logger = LoggerFactory.getLogger(ModellingHelperImpl.class);
 
   
-  @Override
   public boolean areMandatoryAttributesPresent(
       Map<String, String> consumerAttributes, Provider p) {
     return areMandatoryAttributesPresent_(consumerAttributes, p);
   }
 
-
-  @Override
   public ImportedBundle buildFragmentHost(String fragmentHostHeader)
       throws InvalidAttributeException {
     return buildFragmentHost_(fragmentHostHeader);
   }
 
-
-  @Override
   public ImportedPackage intersectPackage(ImportedPackage p1, ImportedPackage p2) {
     return intersectPackage_(p1, p2);
   }
   
-  @Override
   public DeployedBundles createDeployedBundles(String assetName,
       Collection<ImportedBundle> appContentNames,
       Collection<ImportedBundle> appUseBundleNames,
@@ -115,9 +108,9 @@ public class ModellingHelperImpl implements ModellingHelper
       
       return null;
     }
-    Map<String, NameValueMap<String, String>> parsedFragHost = ManifestHeaderProcessor.parseImportString(fragmentHostHeader);
+    Map<String, Map<String, String>> parsedFragHost = ManifestHeaderProcessor.parseImportString(fragmentHostHeader);
     if(parsedFragHost.size() != 1)
-      throw new InvalidAttributeException(MessageUtil.getMessage("APPUTILS0001W",
+      throw new InvalidAttributeException(MessageUtil.getMessage("MORE_THAN_ONE_FRAG_HOST",
           new Object[] {fragmentHostHeader}, 
           "An internal error occurred. A bundle fragment manifest must define exactly one Fragment-Host entry. The following entry was found" + fragmentHostHeader + "."));
     

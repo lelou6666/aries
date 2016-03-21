@@ -20,6 +20,7 @@
 package org.apache.aries.application.runtime.framework.management;
 
 import java.util.Properties;
+
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
 import org.osgi.framework.Constants;
@@ -48,7 +49,7 @@ public class SharedBundleFramework
    * org.osgi.service.blueprint package is deliberately unversioned as it is
    * not part of the osgi compendium.
    */
-  private static final String RUNTIME_PACKAGES = "org.osgi.service.blueprint,org.osgi.service.blueprint.container;version=\"[1.0.0,1.0.1]\",org.osgi.service.blueprint.reflect;version=\"[1.0.0,1.0.1]\",org.apache.aries.transaction.exception;version=\"[0.1,1.0.0)\"";
+  private static final String RUNTIME_PACKAGES = "org.osgi.service.blueprint,org.osgi.service.blueprint.container;version=\"[1.0.0,1.0.1]\",org.osgi.service.blueprint.reflect;version=\"[1.0.0,1.0.1]\",org.apache.aries.transaction.exception;version=\"[1.0.0,2.0.0)\",org.osgi.service.cm;resolution:=optional";
 
   /**
    * create using any bundle context in EBA App framework as we want to create
@@ -111,7 +112,7 @@ public class SharedBundleFramework
 
     return sharedFramework;
   }
-
+  
   /**
    * Wrapper for the basic framework configuration
    * @author cwilkin
@@ -136,9 +137,12 @@ public class SharedBundleFramework
       Properties compositeManifest = basicConfig.getFrameworkManifest();
       
       compositeManifest.put(Constants.BUNDLE_SYMBOLICNAME, BundleFramework.SHARED_BUNDLE_FRAMEWORK);
-
-      // Add blueprint so that it is available to applications.
-      compositeManifest.put(Constants.IMPORT_PACKAGE, RUNTIME_PACKAGES);
+      
+      // Add blueprint so that it is available to applications, unless configuration has already been provided.
+      String existingImports = (String) compositeManifest.get(Constants.IMPORT_PACKAGE);
+      if (existingImports == null){
+        compositeManifest.put(Constants.IMPORT_PACKAGE, RUNTIME_PACKAGES);
+      }
       
       return compositeManifest;
     }

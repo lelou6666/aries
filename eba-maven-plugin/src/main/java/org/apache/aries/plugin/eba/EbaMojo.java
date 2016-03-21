@@ -69,7 +69,8 @@ public class EbaMojo
     private static final String APPLICATION_CONTENT = "Application-Content";
     private static final String APPLICATION_EXPORTSERVICE = "Application-ExportService";
     private static final String APPLICATION_IMPORTSERVICE = "Application-ImportService";
-
+    private static final String APPLICATION_USEBUNDLE = "Use-Bundle";
+    
     /**
      * Coverter for maven pom values to OSGi manifest values (pulled in from the maven-bundle-plugin)
      */
@@ -196,6 +197,16 @@ public class EbaMojo
      */
     private boolean useTransitiveDependencies;
 
+    /**
+     * Define which bundles to include in the archive.
+     *   none - no bundles are included 
+     *   applicationContent - direct dependencies go into the content
+     *   all - direct and transitive dependencies go into the content 
+     *
+     * @parameter expression="${archiveContent}" default-value="applicationContent"
+     */
+    private String archiveContent;
+
 
     private File buildDir;
 
@@ -212,6 +223,13 @@ public class EbaMojo
         getLog().debug( "finalName[" + finalName + "]" );
         getLog().debug( "generateManifest[" + generateManifest + "]" );
 
+        if (archiveContent == null) {
+        	archiveContent = new String("applicationContent");
+        }
+        
+        getLog().debug( "archiveContent[" + archiveContent + "]" );        
+        getLog().info( "archiveContent[" + archiveContent + "]" );        
+        
         zipArchiver.setIncludeEmptyDirs( includeEmptyDirs );
         zipArchiver.setCompress( true );
         zipArchiver.setForced( forceCreation );
@@ -235,20 +253,36 @@ public class EbaMojo
         // Copy dependencies
         try
         {
-            Set<Artifact> artifacts;
-            if (useTransitiveDependencies) {
-                artifacts = project.getArtifacts();
+            Set<Artifact> artifacts = null;
+            if (useTransitiveDependencies || "all".equals(archiveContent)) {
+                // if use transitive is set (i.e. true) then we need to make sure archiveContent does not contradict (i.e. is set
+                // to the same compatible value or is the default).
+            	if ("none".equals(archiveContent)) {
+                    throw new MojoExecutionException("<useTransitiveDependencies/> and <archiveContent/> incompatibly configured.  <useTransitiveDependencies/> is deprecated in favor of <archiveContent/>." );            		
+            	}
+            	else {
+                    artifacts = project.getArtifacts();            		
+            	}
             } else {
-                artifacts = project.getDependencyArtifacts();
+            	// check that archiveContent is compatible
+            	if ("applicationContent".equals(archiveContent)) {
+                    artifacts = project.getDependencyArtifacts();            		
+            	}
+            	else {
+                	// the only remaining options should be applicationContent="none"
+                    getLog().info("archiveContent=none: application arvhive will not contain any bundles.");            		
+            	}
             }
-            for (Artifact artifact : artifacts) {
+            if (artifacts != null) {
+                for (Artifact artifact : artifacts) {
 
-                ScopeArtifactFilter filter = new ScopeArtifactFilter(Artifact.SCOPE_RUNTIME);
-                if (!artifact.isOptional() && filter.include(artifact)) {
-                    getLog().info("Copying artifact[" + artifact.getGroupId() + ", " + artifact.getId() + ", " +
-                            artifact.getScope() + "]");
-                    zipArchiver.addFile(artifact.getFile(), artifact.getArtifactId() + "-" + artifact.getVersion() + "." + (artifact.getType() == null ? "jar" : artifact.getType()));
-                }
+                    ScopeArtifactFilter filter = new ScopeArtifactFilter(Artifact.SCOPE_RUNTIME);
+                    if (!artifact.isOptional() && filter.include(artifact)) {
+                        getLog().info("Copying artifact[" + artifact.getGroupId() + ", " + artifact.getId() + ", " +
+                                artifact.getScope() + "]");
+                        zipArchiver.addFile(artifact.getFile(), artifact.getArtifactId() + "-" + artifact.getVersion() + "." + (artifact.getType() == null ? "jar" : artifact.getType()));
+                    }
+                }            	
             }
         }
         catch ( ArchiverException e )
@@ -434,6 +468,11 @@ public class EbaMojo
 				FileUtils.fileAppend(fileName, APPLICATION_IMPORTSERVICE + ": "
 						+ instructions.get(APPLICATION_IMPORTSERVICE) + "\n");
 			}
+			if (instructions.containsKey(APPLICATION_USEBUNDLE)) {
+				FileUtils.fileAppend(fileName, APPLICATION_USEBUNDLE + ": "
+						+ instructions.get(APPLICATION_USEBUNDLE) + "\n");
+			}
+                        // Add any use bundle entry
 
 		} catch (Exception e) {
 			throw new MojoExecutionException(
@@ -471,7 +510,7 @@ public class EbaMojo
         throws IOException
     {
         if (applicationManifestFile == null) {
-            throw new NullPointerException("application manifest file location not set");
+            throw new NullPointerException("Application manifest file location not set.  Use <generateManifest>true</generateManifest> if you want it to be generated.");
         }
         File appMfFile = applicationManifestFile;
         if (appMfFile.exists()) {

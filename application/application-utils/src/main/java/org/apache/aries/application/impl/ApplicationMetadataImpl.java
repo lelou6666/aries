@@ -37,8 +37,7 @@ import org.apache.aries.application.ApplicationMetadata;
 import org.apache.aries.application.Content;
 import org.apache.aries.application.ServiceDeclaration;
 import org.apache.aries.application.utils.AppConstants;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor;
-import org.apache.aries.application.utils.manifest.ManifestHeaderProcessor.NameValueMap;
+import org.apache.aries.util.manifest.ManifestHeaderProcessor;
 import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.Version;
 import org.slf4j.Logger;
@@ -55,11 +54,11 @@ public final class ApplicationMetadataImpl implements ApplicationMetadata
   private Version appVersion;
   private String appName;
   private String appScope;
-  private List<Content> appContents;
-  private List<ServiceDeclaration> importServices;
-  private List<ServiceDeclaration> exportServices;
-  private Manifest manifest;
-  private List<Content> useBundle;
+  private final List<Content> appContents;
+  private final List<ServiceDeclaration> importServices;
+  private final List<ServiceDeclaration> exportServices;
+  private final Manifest manifest;
+  private final List<Content> useBundle;
   /**
    * create the applicationMetadata from appManifest
    * @param appManifest   the Application.mf manifest
@@ -99,15 +98,15 @@ public final class ApplicationMetadataImpl implements ApplicationMetadata
     // configure appContents
  // use parseImportString as we don't allow appContents to be duplicate
     String applicationContents = appMap.get(AppConstants.APPLICATION_CONTENT);
-    Map<String, NameValueMap<String, String>> appContentsMap = ManifestHeaderProcessor.parseImportString(applicationContents);
-    for (Map.Entry<String, NameValueMap<String, String>> e : appContentsMap.entrySet()) {
+    Map<String, Map<String, String>> appContentsMap = ManifestHeaderProcessor.parseImportString(applicationContents);
+    for (Map.Entry<String, Map<String, String>> e : appContentsMap.entrySet()) {
       this.appContents.add(new ContentImpl(e.getKey(), e.getValue()));
     }
    
     String useBundleStr = appMap.get(AppConstants.APPLICATION_USE_BUNDLE);
     if (useBundleStr != null) {
-      Map<String, NameValueMap<String, String>> useBundleMap = ManifestHeaderProcessor.parseImportString(useBundleStr);
-    for (Map.Entry<String, NameValueMap<String, String>> e : useBundleMap.entrySet()) {
+      Map<String, Map<String, String>> useBundleMap = ManifestHeaderProcessor.parseImportString(useBundleStr);
+    for (Map.Entry<String, Map<String, String>> e : useBundleMap.entrySet()) {
         this.useBundle.add(new ContentImpl(e.getKey(), e.getValue()));
       }
     }
@@ -209,7 +208,8 @@ public final class ApplicationMetadataImpl implements ApplicationMetadata
     return false;
   }
   
-  public int hashCode()
+  @Override
+public int hashCode()
   {
     return appScope.hashCode();
   }

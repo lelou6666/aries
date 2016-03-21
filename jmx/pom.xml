@@ -16,25 +16,37 @@
  KIND, either express or implied.  See the License for the
  specific language governing permissions and limitations
  under the License.
---><project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
 
     <parent>
+<<<<<<< HEAD
         <groupId>org.apache.aries</groupId>
         <artifactId>java5-parent</artifactId>
         <version>0.3</version>
         <relativePath>../parent/default-parent/java5-parent/pom.xml</relativePath>
+=======
+        <groupId>org.apache.aries.jmx</groupId>
+        <artifactId>org.apache.aries.jmx.parent</artifactId>
+        <version>1.1.6-SNAPSHOT</version>
+        <relativePath>jmx-parent</relativePath>
+>>>>>>> refs/remotes/apache/trunk
     </parent>  
 
-    <modelVersion>4.0.0</modelVersion>
     <groupId>org.apache.aries.jmx</groupId>
     <artifactId>jmx</artifactId>
     <name>Apache Aries JMX</name>
+<<<<<<< HEAD
     <version>0.3.1-SNAPSHOT</version>
+=======
+>>>>>>> refs/remotes/apache/trunk
     <packaging>pom</packaging>
+    <description>Implementation of the JMX Management Model Specification - reactor pom</description>
 
-
-    <description>Implementation of the JMX Management Model Specification</description>
     <scm>
+<<<<<<< HEAD
         <connection>scm:svn:http://svn.apache.org/repos/asf/aries/branches/0.3-RCx/jmx</connection>
         <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/branches/0.3-RCx/jmx</developerConnection>
         <url>http://svn.apache.org/viewvc/aries/branches/0.3-RCx/jmx</url>
@@ -158,16 +170,24 @@
             </plugins>
         </pluginManagement>
     </build>
+=======
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/jmx</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/jmx</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/jmx</url>
+    </scm>
+>>>>>>> refs/remotes/apache/trunk
 
     <modules>
+        <module>jmx-parent</module>
         <module>jmx-api</module>
         <module>jmx-blueprint-api</module>
         <module>jmx-core</module>
+        <module>jmx-core-whiteboard</module>
         <module>jmx-whiteboard</module>
         <module>jmx-blueprint-core</module>
         <module>jmx-bundle</module>
         <module>jmx-blueprint-bundle</module>
         <module>jmx-itests</module>
-  </modules>
+    </modules>
 
 </project>

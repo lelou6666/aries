@@ -18,6 +18,10 @@
  */
 package org.apache.aries.blueprint.utils;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -27,35 +31,43 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.Future;
 
-import org.apache.aries.blueprint.ExtendedBlueprintContainer;
 import org.apache.aries.blueprint.di.CircularDependencyException;
 import org.apache.aries.blueprint.di.ExecutionContext;
 import org.apache.aries.blueprint.di.Recipe;
+import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
 import org.apache.aries.blueprint.utils.ReflectionUtils.PropertyDescriptor;
-import org.apache.aries.unittest.mocks.Skeleton;
+import org.easymock.Capture;
+import org.easymock.EasyMock;
+import org.easymock.IAnswer;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.osgi.service.blueprint.container.ComponentDefinitionException;
 import org.osgi.service.blueprint.container.ReifiedType;
 
-import static org.junit.Assert.*;
-
 public class ReflectionUtilsTest {
     private PropertyDescriptor[] sut;
-    private final ExtendedBlueprintContainer mockBlueprint = Skeleton.newMock(ExtendedBlueprintContainer.class);
-    
-    static class GetterOnly {
+    private static ExtendedBlueprintContainer mockBlueprint;
+    public static class GetterOnly {
         public String getValue() { return "test"; }
     }
     
     private class Inconvertible {}
     
     @BeforeClass
-    public static void before()
+    public static void before() throws ClassNotFoundException
     {
+        mockBlueprint = EasyMock.createNiceMock(ExtendedBlueprintContainer.class);
+        final Capture<String> nameCapture = new Capture<String>();
+        EasyMock.expect(mockBlueprint.loadClass(EasyMock.capture(nameCapture))).andAnswer(new IAnswer<Class<?>>() {
+            public Class<?> answer() throws Throwable {
+                return Thread.currentThread().getContextClassLoader().loadClass(nameCapture.getValue());
+            }
+        });
+        EasyMock.replay(mockBlueprint);
+
         ExecutionContext.Holder.setContext(new ExecutionContext() {
-            public void addFullObject(String name, Object object) {}
             public void addPartialObject(String name, Object object) {}
             public boolean containsObject(String name) { return false; }
 
@@ -78,14 +90,14 @@ public class ReflectionUtilsTest {
                 else return false;
             }
 
-            public Object getInstanceLock() { return null; }
             public Object getObject(String name) { return null; }
             public Object getPartialObject(String name) { return null; }
             public Recipe getRecipe(String name) { return null; }
             public Class loadClass(String className) throws ClassNotFoundException { return null; }
             public Recipe pop() { return null; }
             public void push(Recipe recipe) throws CircularDependencyException {}
-            public Object removePartialObject(String name) { return null; }            
+            public void removePartialObject(String name) {}
+            public Future<Object> addFullObject(String name, Future<Object> object) { return null; }            
         });
     }
     
@@ -103,7 +115,7 @@ public class ReflectionUtilsTest {
         assertEquals("test", sut[1].get(new GetterOnly(), mockBlueprint));
     }
     
-    static class SetterOnly {
+    public static class SetterOnly {
         private String f;
         
         public void setField(String val) { f = val; }
@@ -125,7 +137,7 @@ public class ReflectionUtilsTest {
         assertEquals("trial", so.retrieve());
     }
     
-    static class SetterAndGetter {
+    public static class SetterAndGetter {
         private String f;
         
         public void setField(String val) { f = val; }
@@ -192,7 +204,7 @@ public class ReflectionUtilsTest {
         assertEquals("predicament", sut[2].get(fap, mockBlueprint));
     }
     
-    static class OverloadedSetters {
+    public static class OverloadedSetters {
         public Object field;
         
         public void setField(String val) { field = val; }
@@ -223,7 +235,7 @@ public class ReflectionUtilsTest {
         sut[1].set(new OverloadedSetters(), new Inconvertible(), mockBlueprint);
     }
     
-    static class MultipleMatchesByConversion {
+    public static class MultipleMatchesByConversion {
         public void setField(String s) {}
         public void setField(List<String> list) {}
     }
@@ -234,8 +246,8 @@ public class ReflectionUtilsTest {
         
         sut[1].set(new MultipleMatchesByConversion(), new HashSet<String>(), mockBlueprint);
     }
-    
-    static class MultipleMatchesByType {
+
+    public static class MultipleMatchesByType {
         public void setField(List<String> list) {}
         public void setField(Queue<String> list) {}
         
@@ -259,8 +271,8 @@ public class ReflectionUtilsTest {
         sut[2].set(new MultipleMatchesByType(), new ArrayList<String>(), mockBlueprint);
         assertEquals(2, MultipleMatchesByType.field);
     }
-    
-    static class NullSetterDisambiguation {
+
+    public static class NullSetterDisambiguation {
         public static int field;
         
         public void setField(int i) { field = i; }

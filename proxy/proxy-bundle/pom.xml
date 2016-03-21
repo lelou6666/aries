@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -17,54 +18,86 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
+<<<<<<< HEAD
         <groupId>org.apache.aries.proxy</groupId>
         <artifactId>proxy</artifactId>
         <version>0.3.1-SNAPSHOT</version>
+=======
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../../parent/pom.xml</relativePath>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
+    <groupId>org.apache.aries.proxy</groupId>
     <artifactId>org.apache.aries.proxy</artifactId>
     <packaging>bundle</packaging>
     <name>Apache Aries Proxy Bundle</name>
+    <version>1.0.2-SNAPSHOT</version>
     <description>
         This bundle contains the Apache Aries Proxy Service.
     </description>
 
+<<<<<<< HEAD
+=======
+    <scm>
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/proxy/proxy-bundle</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/proxy/proxy-bundle</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/proxy/proxy-bundle</url>
+    </scm>
+
+>>>>>>> refs/remotes/apache/trunk
     <properties>
+        <!-- Export package versions are maintained in packageinfo files -->
         <aries.osgi.activator>
             org.apache.aries.proxy.impl.ProxyManagerActivator
         </aries.osgi.activator>
         <aries.osgi.export.pkg>
-            org.apache.aries.proxy;
+            org.apache.aries.proxy;,
+            org.apache.aries.proxy.weaving;,
+            org.apache.aries.proxy.weavinghook;
         </aries.osgi.export.pkg>
         <aries.osgi.import.pkg>
-            org.eclipse.*;resolution:=optional,
+            org.objectweb.asm*;resolution:=optional,
+            sun.reflect*;resolution:=optional,
+            org.osgi.framework;version="[1.5,2)",
+            org.osgi.framework.hooks.weaving;resolution:=optional,
+            org.osgi.framework.wiring;resolution:=optional,
+            org.slf4j;version="[1.6,2)";resolution:=optional,
             *
         </aries.osgi.import.pkg>
         <aries.osgi.private.pkg>
             org.apache.aries.proxy.impl*,
             org.apache.aries.proxy.nls
         </aries.osgi.private.pkg>
+        <lastReleaseVersion>1.0.1</lastReleaseVersion>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.apache.aries.proxy</groupId>
+            <artifactId>org.apache.aries.proxy.api</artifactId>
+            <version>1.0.2-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries.proxy</groupId>
+            <artifactId>org.apache.aries.proxy.impl</artifactId>
+            <version>1.0.5-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.osgi</groupId>
             <artifactId>org.osgi.core</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.compendium</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse</groupId>
-            <artifactId>osgi</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
+<<<<<<< HEAD
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
@@ -78,7 +111,41 @@
         	<groupId>org.apache.aries.proxy</groupId>
         	<artifactId>org.apache.aries.proxy.impl</artifactId>
         	<version>${version}</version>
+=======
+            <groupId>org.osgi</groupId>
+            <artifactId>org.osgi.compendium</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-debug-all</artifactId>
+            <optional>true</optional>
+            <version>5.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <scope>provided</scope>
+>>>>>>> refs/remotes/apache/trunk
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.aries.versioning</groupId>
+                <artifactId>org.apache.aries.versioning.plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-verify</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>version-check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

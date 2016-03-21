@@ -20,8 +20,6 @@ package org.apache.aries.jndi.startup;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import javax.naming.NamingException;
 import javax.naming.spi.InitialContextFactory;
@@ -36,7 +34,10 @@ import org.apache.aries.jndi.OSGiInitialContextFactoryBuilder;
 import org.apache.aries.jndi.OSGiObjectFactoryBuilder;
 import org.apache.aries.jndi.ProviderAdminServiceFactory;
 import org.apache.aries.jndi.Utils;
+import org.apache.aries.jndi.AugmenterInvokerImpl;
 import org.apache.aries.jndi.spi.EnvironmentAugmentation;
+import org.apache.aries.jndi.spi.EnvironmentUnaugmentation;
+import org.apache.aries.jndi.spi.AugmenterInvoker;
 import org.apache.aries.jndi.tracker.ServiceTrackerCustomizers;
 import org.apache.aries.jndi.urls.URLObjectFactoryFinder;
 import org.osgi.framework.BundleActivator;
@@ -46,6 +47,8 @@ import org.osgi.service.jndi.JNDIContextManager;
 import org.osgi.service.jndi.JNDIProviderAdmin;
 import org.osgi.util.tracker.ServiceTracker;
 import org.osgi.util.tracker.ServiceTrackerCustomizer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The activator for this bundle makes sure the static classes in it are
@@ -53,7 +56,7 @@ import org.osgi.util.tracker.ServiceTrackerCustomizer;
  */
 public class Activator implements BundleActivator {
 
-    private static final Logger LOGGER = Logger.getLogger(Activator.class.getName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(Activator.class.getName());
 
     private OSGiInitialContextFactoryBuilder icfBuilder;
     private OSGiObjectFactoryBuilder ofBuilder;
@@ -62,49 +65,61 @@ public class Activator implements BundleActivator {
     private static ServiceTracker initialContextFactories;
     private static ServiceTracker objectFactories;
     private static ServiceTracker environmentAugmentors;
-    
+    private static ServiceTracker environmentUnaugmentors;
+
     public void start(BundleContext context) {
-        
+
         initialContextFactories = initServiceTracker(context, InitialContextFactory.class, ServiceTrackerCustomizers.ICF_CACHE);
         objectFactories = initServiceTracker(context, ObjectFactory.class, ServiceTrackerCustomizers.URL_FACTORY_CACHE);
         icfBuilders = initServiceTracker(context, InitialContextFactoryBuilder.class, ServiceTrackerCustomizers.LAZY);
         urlObjectFactoryFinders = initServiceTracker(context, URLObjectFactoryFinder.class, ServiceTrackerCustomizers.LAZY);
         environmentAugmentors = initServiceTracker(context, EnvironmentAugmentation.class, null);
-        
+        environmentUnaugmentors = initServiceTracker(context, EnvironmentUnaugmentation.class, null);
+
         try {
             OSGiInitialContextFactoryBuilder builder = new OSGiInitialContextFactoryBuilder();
             NamingManager.setInitialContextFactoryBuilder(builder);
             icfBuilder = builder;
         } catch (NamingException e) {
-            LOGGER.log(Level.INFO, "Cannot set the InitialContextFactoryBuilder.", e);
+            LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.ICFB"), e);
         } catch (IllegalStateException e) {
-            LOGGER.log(Level.INFO, "Cannot set the InitialContextFactoryBuilder. Another builder " + getClassName(InitialContextFactoryBuilder.class) + " is already installed", e);
+            // Log the problem at info level, but only log the exception at debug level, as in many cases this is not a real issue and people
+            // don't want to see stack traces at info level when everything it working as expected.
+            LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.ICFB.already.exists", getClassName(InitialContextFactoryBuilder.class)));
+            LOGGER.debug(Utils.MESSAGES.getMessage("unable.to.set.static.ICFB.already.exists", getClassName(InitialContextFactoryBuilder.class)), e);
         }
-    
+
         try {
             OSGiObjectFactoryBuilder builder = new OSGiObjectFactoryBuilder(context);
             NamingManager.setObjectFactoryBuilder(builder);
             ofBuilder = builder;
         } catch (NamingException e) {
-            LOGGER.log(Level.INFO, "Cannot set the ObjectFactoryBuilder.", e);
+            LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.OFB"), e);
         } catch (IllegalStateException e) {
-            LOGGER.log(Level.INFO, "Cannot set the ObjectFactoryBuilder. Another builder " + getClassName(InitialContextFactoryBuilder.class) + " is already installed", e);
+            // Log the problem at info level, but only log the exception at debug level, as in many cases this is not a real issue and people
+            // don't want to see stack traces at info level when everything it working as expected.
+            LOGGER.info(Utils.MESSAGES.getMessage("unable.to.set.static.OFB.already.exists", getClassName(InitialContextFactoryBuilder.class)));
+            LOGGER.debug(Utils.MESSAGES.getMessage("unable.to.set.static.OFB.already.exists", getClassName(InitialContextFactoryBuilder.class)), e);
         }
-        
-        context.registerService(JNDIProviderAdmin.class.getName(), 
-                                new ProviderAdminServiceFactory(context), 
+
+        context.registerService(JNDIProviderAdmin.class.getName(),
+                                new ProviderAdminServiceFactory(context),
                                 null);
 
-        context.registerService(InitialContextFactoryBuilder.class.getName(), 
-                                new JREInitialContextFactoryBuilder(), 
+        context.registerService(InitialContextFactoryBuilder.class.getName(),
+                                new JREInitialContextFactoryBuilder(),
                                 null);
 
-        context.registerService(JNDIContextManager.class.getName(), 
+        context.registerService(JNDIContextManager.class.getName(),
                                 new ContextManagerServiceFactory(),
                                 null);
+               context.registerService(AugmenterInvoker.class.getName(),
+                                               AugmenterInvokerImpl.getInstance(),
+                                               null);
+
     }
 
-    private String getClassName(Class<?> expectedType) 
+    private String getClassName(Class<?> expectedType)
     {
       try {
         for (Field field : NamingManager.class.getDeclaredFields()) {
@@ -121,7 +136,7 @@ public class Activator implements BundleActivator {
     }
 
     private ServiceTracker initServiceTracker(BundleContext context,
-        Class<?> type, ServiceTrackerCustomizer custom) 
+        Class<?> type, ServiceTrackerCustomizer custom)
     {
       ServiceTracker t = new ServiceTracker(context, type.getName(), custom);
       t.open();
@@ -131,7 +146,7 @@ public class Activator implements BundleActivator {
     public void stop(BundleContext context) {
         /*
          * Try to reset the InitialContextFactoryBuilder and ObjectFactoryBuilder
-         * on the NamingManager. 
+         * on the NamingManager.
          */
         if (icfBuilder != null) {
             unsetField(InitialContextFactoryBuilder.class);
@@ -139,17 +154,18 @@ public class Activator implements BundleActivator {
         if (ofBuilder != null) {
             unsetField(ObjectFactoryBuilder.class);
         }
-        
+
         icfBuilders.close();
         urlObjectFactoryFinders.close();
         objectFactories.close();
         initialContextFactories.close();
         environmentAugmentors.close();
+        environmentUnaugmentors.close();
     }
-    
+
     /*
      * There are no public API to reset the InitialContextFactoryBuilder or
-     * ObjectFactoryBuilder on the NamingManager so try to use reflection. 
+     * ObjectFactoryBuilder on the NamingManager so try to use reflection.
      */
     private static void unsetField(Class<?> expectedType) {
         try {
@@ -161,39 +177,45 @@ public class Activator implements BundleActivator {
             }
         } catch (Throwable t) {
             // Ignore
-            LOGGER.log(Level.FINE, "Error setting field.", t);
+            LOGGER.debug("Error setting field.", t);
         }
     }
 
     public static ServiceReference[] getInitialContextFactoryBuilderServices()
     {
       ServiceReference[] refs = icfBuilders.getServiceReferences();
-      
+
       if (refs != null) Arrays.sort(refs, Utils.SERVICE_REFERENCE_COMPARATOR);
-      
-      return refs;
-    }
-    
-    public static ServiceReference[] getInitialContextFactoryServices() 
-    {
-      ServiceReference[] refs = initialContextFactories.getServiceReferences();
-      
-      if (refs != null) Arrays.sort(refs, Utils.SERVICE_REFERENCE_COMPARATOR);
-      
+
       return refs;
     }
 
-    public static ServiceReference[] getURLObectFactoryFinderServices() 
+    public static ServiceReference[] getInitialContextFactoryServices()
     {
-      ServiceReference[] refs = urlObjectFactoryFinders.getServiceReferences();
-      
+      ServiceReference[] refs = initialContextFactories.getServiceReferences();
+
       if (refs != null) Arrays.sort(refs, Utils.SERVICE_REFERENCE_COMPARATOR);
-      
+
       return refs;
     }
-    
+
+    public static ServiceReference[] getURLObectFactoryFinderServices()
+    {
+      ServiceReference[] refs = urlObjectFactoryFinders.getServiceReferences();
+
+      if (refs != null) Arrays.sort(refs, Utils.SERVICE_REFERENCE_COMPARATOR);
+
+      return refs;
+    }
+
     public static Object[] getEnvironmentAugmentors()
     {
       return environmentAugmentors.getServices();
     }
+
+    public static Object[] getEnvironmentUnaugmentors()
+    {
+      return environmentUnaugmentors.getServices();
+    }
+
 }

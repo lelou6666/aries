@@ -22,13 +22,18 @@
     <parent>
         <groupId>org.apache.aries.samples.blog</groupId>
         <artifactId>blog</artifactId>
+<<<<<<< HEAD
         <version>0.3.1-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <artifactId>org.apache.aries.samples.blog.api</artifactId>
     <name>Apache Aries blog sample API</name>
     <packaging>bundle</packaging>
 
+<<<<<<< HEAD
     <build>
         <plugins>
             <plugin>
@@ -48,4 +53,16 @@
             </plugin>
         </plugins>
     </build>
+=======
+    <properties>
+         <!-- Export package versions are maintained in packageinfo files -->
+         <aries.osgi.export.pkg>
+              org.apache.aries.samples.blog.api,
+              org.apache.aries.samples.blog.api.comment.persistence,
+              org.apache.aries.samples.blog.api.persistence,
+         </aries.osgi.export.pkg>
+         <aries.osgi.private.pkg />
+    </properties>
+
+>>>>>>> refs/remotes/apache/trunk
 </project>

@@ -18,35 +18,42 @@
  */
 package org.apache.aries.blueprint.itests;
 
+import static org.apache.aries.blueprint.itests.Helper.mvnBundle;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.ops4j.pax.exam.CoreOptions.equinox;
-import static org.ops4j.pax.exam.CoreOptions.options;
-import static org.ops4j.pax.exam.CoreOptions.systemProperty;
 
 import java.util.Hashtable;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import junit.framework.Assert;
 
 import org.apache.aries.blueprint.sample.BindingListener;
+import org.apache.aries.blueprint.sample.DefaultRunnable;
+import org.apache.aries.blueprint.sample.DestroyTest;
 import org.apache.aries.blueprint.sample.InterfaceA;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.ops4j.pax.exam.Configuration;
+import org.ops4j.pax.exam.CoreOptions;
 import org.ops4j.pax.exam.Option;
-import org.ops4j.pax.exam.junit.JUnit4TestRunner;
+import org.ops4j.pax.exam.junit.PaxExam;
+import org.osgi.framework.Bundle;
 import org.osgi.framework.Constants;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.blueprint.container.BlueprintContainer;
 import org.osgi.service.blueprint.container.ServiceUnavailableException;
 
-@RunWith(JUnit4TestRunner.class)
-public class TestReferences extends AbstractIntegrationTest {
+@RunWith(PaxExam.class)
+public class TestReferences extends AbstractBlueprintIntegrationTest {
 
+    @SuppressWarnings("rawtypes")
     @Test
     public void testUnaryReference() throws Exception {
-        BlueprintContainer blueprintContainer = getBlueprintContainerForBundle("org.apache.aries.blueprint.sample");
+        BlueprintContainer blueprintContainer = Helper.getBlueprintContainerForBundle(context(), "org.apache.aries.blueprint.sample");
         assertNotNull(blueprintContainer);
 
         BindingListener listener = (BindingListener) blueprintContainer.getComponentInstance("bindingListener");
@@ -66,11 +73,13 @@ public class TestReferences extends AbstractIntegrationTest {
                 return "Hello " + msg + "!";
             }
         }, null);
+        waitForAsynchronousHandling();
+
         assertNotNull(listener.getA());
         assertNotNull(listener.getReference());
         assertEquals("Hello world!", a.hello("world"));
 
-        Hashtable props = new Hashtable();
+        Hashtable<String, Object> props = new Hashtable<String, Object>();
         props.put(Constants.SERVICE_RANKING, Integer.valueOf(1));
         ServiceRegistration reg2 = bundleContext.registerService(InterfaceA.class.getName(), new InterfaceA() {
             public String hello(String msg) {
@@ -78,16 +87,21 @@ public class TestReferences extends AbstractIntegrationTest {
             }
         }, props);
 
+        waitForAsynchronousHandling();
+
         assertNotNull(listener.getA());
         assertNotNull(listener.getReference());
         assertEquals("Hello world!", a.hello("world"));
 
         reg1.unregister();
+        waitForAsynchronousHandling();
         assertNotNull(listener.getA());
         assertNotNull(listener.getReference());
         assertEquals("Good morning world!", a.hello("world"));
 
         reg2.unregister();
+        waitForAsynchronousHandling();
+
         assertNull(listener.getA());
         assertNull(listener.getReference());
         try {
@@ -100,22 +114,25 @@ public class TestReferences extends AbstractIntegrationTest {
 
     @Test
     public void testListReferences() throws Exception {
-        BlueprintContainer blueprintContainer = getBlueprintContainerForBundle("org.apache.aries.blueprint.sample");
+        BlueprintContainer blueprintContainer = Helper.getBlueprintContainerForBundle(context(), "org.apache.aries.blueprint.sample");
         assertNotNull(blueprintContainer);
 
         BindingListener listener = (BindingListener) blueprintContainer.getComponentInstance("listBindingListener");
         assertNull(listener.getA());
         assertNull(listener.getReference());
 
-        List refs = (List) blueprintContainer.getComponentInstance("ref-list");
+        List<?> refs = (List<?>) blueprintContainer.getComponentInstance("ref-list");
         assertNotNull(refs);
         assertTrue(refs.isEmpty());
 
-        ServiceRegistration reg1 = bundleContext.registerService(InterfaceA.class.getName(), new InterfaceA() {
+        InterfaceA testService = new InterfaceA() {
             public String hello(String msg) {
                 return "Hello " + msg + "!";
             }
-        }, null);
+        };
+        bundleContext.registerService(InterfaceA.class.getName(), testService, null);
+    
+        waitForAsynchronousHandling();
         assertNotNull(listener.getA());
         assertNotNull(listener.getReference());
         assertEquals(1, refs.size());
@@ -124,35 +141,89 @@ public class TestReferences extends AbstractIntegrationTest {
         assertEquals("Hello world!", a.hello("world"));
 
     }
+    
+    @SuppressWarnings("rawtypes")
+    @Test
+    public void testDefaultReference() throws Exception {
+      BlueprintContainer blueprintContainer = Helper.getBlueprintContainerForBundle(context(), "org.apache.aries.blueprint.sample");
+      assertNotNull(blueprintContainer);
 
-    @org.ops4j.pax.exam.junit.Configuration
+      Runnable refRunnable = (Runnable) blueprintContainer.getComponentInstance("refWithDefault");
+      DefaultRunnable defaultRunnable = (DefaultRunnable) blueprintContainer.getComponentInstance("defaultRunnable");
+      refRunnable.run();
+      waitForAsynchronousHandling();
+      Thread.sleep(2000);
+      
+      assertEquals("The default runnable was not called", 1, defaultRunnable.getCount());
+      
+      final AtomicBoolean called = new AtomicBoolean(false);
+      Runnable mockService = new Runnable() {
+        public void run() {
+            called.set(true);
+        }
+      };
+      
+      ServiceRegistration reg = bundleContext.registerService(Runnable.class.getName(), mockService, null);
+      waitForAsynchronousHandling();
+      Thread.sleep(2000);
+
+      refRunnable.run();
+      
+      assertEquals("The default runnable was called when a service was bound", 1, defaultRunnable.getCount());
+      
+      Assert.assertTrue("Service should have been called", called.get());
+      
+      reg.unregister();
+      waitForAsynchronousHandling();
+      Thread.sleep(2000);
+
+      refRunnable.run();
+      
+      assertEquals("The default runnable was not called", 2, defaultRunnable.getCount());
+    }
+    
+    @Test
+    public void testReferencesCallableInDestroy() throws Exception {
+      bundleContext.registerService(Runnable.class.getName(), new Thread(), null);
+      
+      BlueprintContainer blueprintContainer = Helper.getBlueprintContainerForBundle(context(), "org.apache.aries.blueprint.sample");
+      assertNotNull(blueprintContainer);
+      
+      DestroyTest dt = (DestroyTest) blueprintContainer.getComponentInstance("destroyCallingReference");
+      
+      Bundle b = findBundle("org.apache.aries.blueprint.sample");
+      assertNotNull(b);
+      b.stop();
+      
+      assertTrue("The destroy method was called", dt.waitForDestruction(1000));
+      
+      Exception e = dt.getDestroyFailure();
+      
+      if (e != null) throw e;
+    }
+
+    private Bundle findBundle(String bsn)
+    {
+      for (Bundle b : bundleContext.getBundles()) {
+        if (bsn.equals(b.getSymbolicName())) return b;
+      }
+      
+      return null;
+    }
+
+    private void waitForAsynchronousHandling() throws InterruptedException {
+      // Since service events are handled asynchronously in AbstractServiceReferenceRecipe, pause
+       Thread.sleep(200);
+      
+   }
+
+   @Configuration
     public static Option[] configuration() {
-        Option[] options = options(
-            // Log
-            mavenBundle("org.ops4j.pax.logging", "pax-logging-api"),
-            mavenBundle("org.ops4j.pax.logging", "pax-logging-service"),
-            // Felix Config Admin
-            mavenBundle("org.apache.felix", "org.apache.felix.configadmin"),
-            // Felix mvn url handler
-            mavenBundle("org.ops4j.pax.url", "pax-url-mvn"),
-
-            // this is how you set the default log level when using pax logging (logProfile)
-            systemProperty("org.ops4j.pax.logging.DefaultServiceLog.level").value("INFO"),
-
-            // Bundles
-            mavenBundle("org.apache.aries", "org.apache.aries.util"),
-            mavenBundle("org.apache.aries.proxy", "org.apache.aries.proxy"),
-            mavenBundle("asm", "asm-all"),
-            mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint"),
-            mavenBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.sample"),
-            mavenBundle("org.osgi", "org.osgi.compendium"),
-
-//            org.ops4j.pax.exam.container.def.PaxRunnerOptions.vmOption("-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"),
-
-            equinox().version("3.5.0")
-        );
-        options = updateOptions(options);
-        return options;
+        return new Option[] {
+                CoreOptions.junitBundles(),
+                Helper.blueprintBundles(),
+                mvnBundle("org.apache.aries.blueprint", "org.apache.aries.blueprint.sample")
+        };
     }
 
 }

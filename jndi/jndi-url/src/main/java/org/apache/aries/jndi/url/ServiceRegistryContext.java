@@ -32,6 +32,7 @@ import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 
 import org.apache.aries.jndi.services.ServiceHelper;
+import org.apache.aries.util.nls.MessageUtil;
 import org.osgi.framework.AdminPermission;
 import org.osgi.framework.BundleContext;
 
@@ -74,6 +75,8 @@ public class ServiceRegistryContext extends AbstractServiceRegistryContext imple
         return listBindings(parse(name));
     }
 
+    private static final MessageUtil MESSAGES = MessageUtil.createMessageUtil(ServiceRegistryContext.class, "org.apache.aries.jndi.nls.jndiUrlMessages");
+
     public Object lookup(Name name) throws NamingException {
         Object result;
 
@@ -90,7 +93,7 @@ public class ServiceRegistryContext extends AbstractServiceRegistryContext imple
                     AccessController.checkPermission(adminPermission);
                     return callerContext;
                 } catch (AccessControlException accessControlException) {
-                    NamingException namingException = new NameNotFoundException("Caller does not have permissions to get BundleContext.");
+                    NamingException namingException = new NameNotFoundException(MESSAGES.getMessage("caller.not.priviledged"));
                     namingException.setRootCause(accessControlException);
                     throw namingException;
                 }
@@ -114,19 +117,13 @@ public class ServiceRegistryContext extends AbstractServiceRegistryContext imple
     }
 
     private OsgiName convert(Name name) throws NamingException {
-        OsgiName result;
-
         if (name instanceof OsgiName) {
-            result = (OsgiName) name;
+            return (OsgiName) name;
+        } else if (parentName != null) {
+            return new OsgiName(parentName.toString() + "/" + name.toString());
         } else {
-            if (parentName != null) {
-                result = new OsgiName(parentName.toString() + "/" + name.toString());
-            } else {
-                result = (OsgiName) parser.parse(name.toString());
-            }
+            return (OsgiName) parser.parse(name.toString());
         }
-
-        return result;
     }
 
     private Name parse(String name) throws NamingException {

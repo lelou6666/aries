@@ -20,7 +20,7 @@ package org.apache.aries.jmx.whiteboard;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.IdentityHashMap;
 
 import javax.management.MBeanRegistration;
 import javax.management.MBeanServer;
@@ -33,14 +33,15 @@ import org.slf4j.LoggerFactory;
 
 class JmxWhiteboardSupport {
 
-    private static final String PROP_OBJECT_NAME = "jmx.objectname";
+    static final String PROP_OBJECT_NAME = "jmx.objectname";
 
     /** default log */
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private MBeanServer[] mbeanServers = new MBeanServer[0];
 
-    private final HashMap<MBeanHolder, MBeanHolder> mbeans = new HashMap<MBeanHolder, MBeanHolder>();
+    // mapping registered MBean services to their MBeanHolder objects
+    private final IdentityHashMap<Object, MBeanHolder> mbeans = new IdentityHashMap<Object, MBeanHolder>();
 
     protected synchronized void addMBeanServer(final MBeanServer mbeanServer) {
 
@@ -78,12 +79,22 @@ class JmxWhiteboardSupport {
 
         ObjectName objectName = getObjectName(props);
         if (objectName != null || mbean instanceof MBeanRegistration) {
-            MBeanHolder holder = new MBeanHolder(mbean, objectName);
-            MBeanServer[] mbeanServers = this.mbeanServers;
-            for (MBeanServer mbeanServer : mbeanServers) {
-                holder.register(mbeanServer);
+            MBeanHolder holder = MBeanHolder.create(mbean, objectName);
+            if (holder != null) {
+                MBeanServer[] mbeanServers = this.mbeanServers;
+                for (MBeanServer mbeanServer : mbeanServers) {
+                    holder.register(mbeanServer);
+                }
+                mbeans.put(mbean, holder);
+            } else {
+                log.error(
+                    "registerMBean: Cannot register MBean service {} with MBean servers: Not an instanceof DynamicMBean or not MBean spec compliant standard MBean",
+                    mbean);
             }
-            mbeans.put(holder, holder);
+        } else {
+            log.error(
+                "registerMBean: MBean service {} not registered with valid jmx.objectname propety and not implementing MBeanRegistration interface; not registering with MBean servers",
+                mbean);
         }
     }
 
@@ -91,7 +102,7 @@ class JmxWhiteboardSupport {
 
         log.debug("unregisterMBean: Removing MBean {}", mbean);
 
-        final MBeanHolder holder = mbeans.remove(new MBeanHolder(mbean, null));
+        final MBeanHolder holder = mbeans.remove(mbean);
         if (holder != null) {
             holder.unregister();
         }

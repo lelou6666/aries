@@ -23,7 +23,7 @@ package org.apache.aries.application.management;
 import java.net.URL;
 
 import org.apache.aries.application.DeploymentMetadata;
-import org.apache.aries.application.filesystem.IDirectory;
+import org.apache.aries.util.filesystem.IDirectory;
 import org.osgi.framework.BundleException;
 
 /**
@@ -49,7 +49,7 @@ public interface AriesApplicationManager
    * archive does not contain a deployment manifest.
    *
    * @param url
-   * @return
+   * @return the application.
    * @throws ManagementException
    */
   public AriesApplication createApplication(URL url) throws ManagementException;

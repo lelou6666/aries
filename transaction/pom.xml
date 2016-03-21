@@ -19,20 +19,24 @@
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
+    <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>org.apache.aries</groupId>
+<<<<<<< HEAD
         <artifactId>java5-parent</artifactId>
         <version>0.3</version>
         <relativePath>../parent/default-parent/java5-parent/pom.xml</relativePath>
+=======
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../parent/pom.xml</relativePath>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
-    <properties>
-        <geronimo-transaction-version>2.2.1</geronimo-transaction-version>
-    </properties>
-
-    <modelVersion>4.0.0</modelVersion>
     <groupId>org.apache.aries.transaction</groupId>
     <artifactId>transaction</artifactId>
+<<<<<<< HEAD
     <version>0.3.1-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Apache Aries Transaction</name>
@@ -141,11 +145,17 @@
             </plugins>
         </pluginManagement>
     </build>
+=======
+    <packaging>pom</packaging>
+    <version>1.0.0-SNAPSHOT</version>
+    <name>Apache Aries Transaction - reactor pom</name>
+>>>>>>> refs/remotes/apache/trunk
 
     <modules>
         <module>transaction-manager</module>
         <module>transaction-blueprint</module>
-        <module>transaction-wrappers</module>
+        <module>transaction-jdbc</module>
+        <module>transaction-jms</module>
         <module>transaction-itests</module>
         <module>transaction-testbundle</module>
         <module>transaction-testds</module>

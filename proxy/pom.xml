@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -18,23 +19,34 @@
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
+    <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>org.apache.aries</groupId>
+<<<<<<< HEAD
         <artifactId>java5-parent</artifactId>
         <version>0.3</version>
+=======
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../parent/pom.xml</relativePath>
+>>>>>>> refs/remotes/apache/trunk
     </parent>  
 
-    <modelVersion>4.0.0</modelVersion>
     <groupId>org.apache.aries.proxy</groupId>
     <artifactId>proxy</artifactId>
     <name>Apache Aries Class Proxy</name>
+<<<<<<< HEAD
     <version>0.3.1-SNAPSHOT</version>
+=======
+>>>>>>> refs/remotes/apache/trunk
     <packaging>pom</packaging>
-
+    <version>1.0.1-SNAPSHOT</version>
     <description>
        A common proxy class generation service that can be used by blueprint and jndi and others.
     </description>
 
+<<<<<<< HEAD
     <scm>
         <connection>scm:svn:http://svn.apache.org/repos/asf/aries/branches/0.3-RCx/proxy</connection>
         <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/branches/0.3-RCx/proxy</developerConnection>
@@ -99,11 +111,13 @@
         </pluginManagement>
     </build>
 
+=======
+>>>>>>> refs/remotes/apache/trunk
     <modules>
-      <module>proxy-api</module>
-      <module>proxy-impl</module>
-      <module>proxy-bundle</module>
-      <module>proxy-itests</module>
+        <module>proxy-api</module>
+        <module>proxy-impl</module>
+        <module>proxy-bundle</module>
+        <module>proxy-itests</module>
     </modules>
 
 </project>
