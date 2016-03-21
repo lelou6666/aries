@@ -24,7 +24,6 @@ import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.naming.NoInitialContextException;
-import javax.naming.directory.InitialDirContext;
 import javax.naming.spi.InitialContextFactory;
 import javax.naming.spi.InitialContextFactoryBuilder;
 
@@ -32,12 +31,6 @@ import org.osgi.framework.BundleContext;
 
 public class OSGiInitialContextFactoryBuilder implements InitialContextFactoryBuilder, InitialContextFactory {
 
-	private BundleContext _context;
-	
-	public OSGiInitialContextFactoryBuilder(BundleContext context) {	
-		_context = context;
-	}
-	
 	public InitialContextFactory createInitialContextFactory(Hashtable<?, ?> environment) 
 	    throws NamingException {
 	    return this;
@@ -46,15 +39,15 @@ public class OSGiInitialContextFactoryBuilder implements InitialContextFactoryBu
 	public Context getInitialContext(Hashtable<?, ?> environment) 
 	    throws NamingException {
 	    
-	    BundleContext context = Utils.getBundleContext(environment, InitialContext.class.getName());	    
+	    AugmenterInvokerImpl.getInstance().augmentEnvironment(environment);
+	  
+	    BundleContext context = Utils.getBundleContext(environment, InitialContext.class);	    
 	    if (context == null) {
-	        context = Utils.getBundleContext(environment, InitialDirContext.class.getName());
-	        if (context == null) {
-	            throw new NoInitialContextException("Unable to determine caller's BundleContext");
-	        }
+            throw new NoInitialContextException(Utils.MESSAGES.getMessage("cannot.find.callers.bundlecontext"));
 	    }
 	    	    
+      AugmenterInvokerImpl.getInstance().unaugmentEnvironment(environment);
+
 	    return ContextHelper.getInitialContext(context, environment);
 	}
-	
 }

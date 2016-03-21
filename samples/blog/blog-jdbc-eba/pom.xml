@@ -26,7 +26,11 @@ under the License.
     <parent>
         <groupId>org.apache.aries.samples.blog</groupId>
         <artifactId>blog</artifactId>
+<<<<<<< HEAD
         <version>0.3-incubating-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.samples.blog</groupId>
@@ -63,11 +67,19 @@ under the License.
             <plugin>
                 <groupId>org.apache.aries</groupId>
                 <artifactId>eba-maven-plugin</artifactId>
+<<<<<<< HEAD
+=======
+                <version>${ariesEbaMavenPluginVersion}</version>
+>>>>>>> refs/remotes/apache/trunk
                 <extensions>true</extensions>
                 <configuration>
                     <generateManifest>true</generateManifest>
                     <instructions>
+<<<<<<< HEAD
                         <Application-SymbolicName>${pom.artifactId}</Application-SymbolicName>
+=======
+                        <Application-SymbolicName>${project.artifactId}</Application-SymbolicName>
+>>>>>>> refs/remotes/apache/trunk
                     </instructions>
                 </configuration>
             </plugin>

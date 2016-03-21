@@ -34,7 +34,7 @@ public interface Repository {
 
     /**
      * Return the singleton instance for the given name.
-     * This method will not create the object if it has been created yet.
+     * This method will not create the object if it has not been created yet.
      *
      * @param name
      * @return the instance or <code>null</code>
@@ -59,19 +59,16 @@ public interface Repository {
     void removeRecipe(String name);
 
     Object create(String name) throws ComponentDefinitionException;
+    
+    Object create(String name, Collection<Class<?>> proxyInterfaces) throws ComponentDefinitionException;
 
-    Map<String, Object> createAll(Collection<String> names) throws ComponentDefinitionException;
+    void createAll(Collection<String> names) throws ComponentDefinitionException;
+    
+    Map<String, Object> createAll(Collection<String> names, Collection<Class<?>> proxyInterfaces) throws ComponentDefinitionException;
 
     <T> List<T> getAllRecipes(Class<T> clazz, String... names);
 
     Set<Recipe> getAllRecipes(String... names);
 
     void destroy();
-
-    /**
-     * Lock that should be used to synchronized creation of singletons
-     *
-     * @return
-     */
-    public Object getInstanceLock();
 }

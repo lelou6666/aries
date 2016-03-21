@@ -19,29 +19,25 @@ package org.apache.aries.blueprint.annotation.impl;
 import java.util.Dictionary;
 import java.util.Hashtable;
 
+import org.apache.aries.blueprint.annotation.service.BlueprintAnnotationScanner;
+import org.apache.aries.util.AriesFrameworkUtil;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
 import org.osgi.framework.ServiceRegistration;
-import org.apache.aries.blueprint.annotation.service.BlueprintAnnotationScanner;
 
 public class Activator implements BundleActivator {
 
     ServiceRegistration sr;
     
     public void start(BundleContext context) {
-        System.out.println("Annotation Scanner Impl Bundle start");
         Dictionary dict = new Hashtable();
         dict.put(Constants.SERVICE_RANKING, 0);
         sr = context.registerService(BlueprintAnnotationScanner.class.getName(), new BlueprintAnnotationScannerImpl(context), dict);
-        System.out.println("finish register service");
     }
 
     public void stop(BundleContext context) {
-        System.out.println("Annotation Scanner Impl Bundle stop");
-        if (sr != null) {
-            sr.unregister();
-        }
+      AriesFrameworkUtil.safeUnregisterService(sr);
     }
    
 }

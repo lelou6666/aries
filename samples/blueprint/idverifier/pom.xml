@@ -20,9 +20,15 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
+<<<<<<< HEAD
         <groupId>org.apache.aries.samples.blueprint</groupId>
         <artifactId>blueprint</artifactId>
         <version>0.3-incubating-SNAPSHOT</version>
+=======
+        <groupId>org.apache.aries.samples</groupId>
+        <artifactId>blueprint</artifactId>
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.samples.blueprint.idverifier</groupId>
@@ -36,23 +42,39 @@
             <dependency>
                 <groupId>org.apache.aries.samples.blueprint.idverifier</groupId>
                 <artifactId>org.apache.aries.samples.blueprint.idverifier.api</artifactId>
+<<<<<<< HEAD
                 <version>${version}</version>
+=======
+                <version>${project.version}</version>
+>>>>>>> refs/remotes/apache/trunk
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blueprint.idverifier</groupId>
                 <artifactId>org.apache.aries.samples.blueprint.idverifier.assembly</artifactId>
                 <type>eba</type>
+<<<<<<< HEAD
                 <version>${version}</version>
+=======
+                <version>${project.version}</version>
+>>>>>>> refs/remotes/apache/trunk
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blueprint.idverifier</groupId>
                 <artifactId>org.apache.aries.samples.blueprint.idverifier.client</artifactId>
+<<<<<<< HEAD
                 <version>${version}</version>
+=======
+                <version>${project.version}</version>
+>>>>>>> refs/remotes/apache/trunk
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blueprint.idverifier</groupId>
                 <artifactId>org.apache.aries.samples.blueprint.idverifier.server</artifactId>
+<<<<<<< HEAD
                 <version>${version}</version>
+=======
+                <version>${project.version}</version>
+>>>>>>> refs/remotes/apache/trunk
             </dependency>
             
         </dependencies>

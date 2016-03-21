@@ -19,12 +19,20 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
+<<<<<<< HEAD
 	<groupId>org.apache.aries.samples.blueprint</groupId>
 	        <artifactId>blueprint</artifactId>
         <version>0.3-incubating-SNAPSHOT</version>
         </parent>
 
 	<groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
+=======
+	    <groupId>org.apache.aries.samples</groupId>
+	    <artifactId>blueprint</artifactId>
+        <version>1.0.1-SNAPSHOT</version>
+    </parent>
+
+>>>>>>> refs/remotes/apache/trunk
 	<artifactId>helloworld</artifactId>
 	<name>Apache Aries Blueprint HelloWorld</name>
 	<packaging>pom</packaging>
@@ -35,22 +43,43 @@
             <dependency>
                 <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
                 <artifactId>org.apache.aries.samples.blueprint.helloworld.api</artifactId>
+<<<<<<< HEAD
                 <version>${version}</version>
+=======
+                <version>${project.version}</version>
+>>>>>>> refs/remotes/apache/trunk
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
                 <artifactId>org.apache.aries.samples.blueprint.helloworld.server</artifactId>
+<<<<<<< HEAD
                 <version>${version}</version>
+=======
+                <version>${project.version}</version>
+>>>>>>> refs/remotes/apache/trunk
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
                 <artifactId>org.apache.aries.samples.blueprint.helloworld.client</artifactId>
+<<<<<<< HEAD
                 <version>${version}</version>
+=======
+                <version>${project.version}</version>
+>>>>>>> refs/remotes/apache/trunk
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
                 <artifactId>org.apache.aries.samples.blueprint.helloworld.assembly</artifactId>
+<<<<<<< HEAD
                 <version>${version}</version>
+=======
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
+                <artifactId>org.apache.aries.samples.blueprint.helloworld.itests</artifactId>
+                <version>${project.version}</version>
+>>>>>>> refs/remotes/apache/trunk
             </dependency>
         </dependencies>
 	</dependencyManagement>
@@ -60,6 +89,11 @@
 		<module>helloworld-server</module>
 		<module>helloworld-client</module>
 		<module>helloworld-assembly</module> 
+<<<<<<< HEAD
+=======
+        <module>helloworld-eba</module>
+        <module>helloworld-itests</module>
+>>>>>>> refs/remotes/apache/trunk
 	</modules>
 
 </project>

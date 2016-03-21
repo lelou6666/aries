@@ -21,7 +21,11 @@
     <parent>
         <groupId>org.apache.aries.samples</groupId>
         <artifactId>samples</artifactId>
+<<<<<<< HEAD
         <version>0.3-incubating-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.samples.blog</groupId>
@@ -34,49 +38,55 @@
             <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.api</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.assembly</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.biz</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.datasource</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.jdbc.eba</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
                 <type>eba</type>
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.jpa.eba</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
                 <type>eba</type>
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.persistence.jdbc</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
             </dependency>
              <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.persistence.jpa</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.aries.samples.blog</groupId>
                 <artifactId>org.apache.aries.samples.blog.web</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
+            </dependency>
+<!-- Override the version of OSGi used in samples, so we can show off weaving (different group id too, unfortunately) -->
+            <dependency>
+                <groupId>org.eclipse.tycho</groupId>
+                <artifactId>org.eclipse.osgi</artifactId>
+                <version>3.7.0.v20110613</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -92,6 +102,7 @@
         <module>blog-persistence-jdbc</module>
         <module>blog-persistence-jpa</module>
         <module>blog-web</module>
+        <module>blog-comment-ejb</module>
         <module>blog-itests</module>
     </modules>
 

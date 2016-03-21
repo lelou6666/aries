@@ -30,9 +30,9 @@ import org.apache.aries.application.DeploymentContent;
 import org.apache.aries.application.DeploymentMetadata;
 import org.apache.aries.application.management.AriesApplication;
 import org.apache.aries.application.management.AriesApplicationContext;
-import org.apache.aries.application.management.AriesApplicationResolver;
 import org.apache.aries.application.management.BundleInfo;
 import org.apache.aries.application.management.ManagementException;
+import org.apache.aries.application.management.spi.resolve.AriesApplicationResolver;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
@@ -67,7 +67,7 @@ public class ApplicationContextImpl implements AriesApplicationContext {
     
       List<DeploymentContent> bundlesToInstall = new ArrayList<DeploymentContent>(meta.getApplicationDeploymentContents());
       bundlesToInstall.addAll(meta.getApplicationProvisionBundles());
-    
+      bundlesToInstall.addAll(meta.getDeployedUseBundle());
       for (DeploymentContent content : bundlesToInstall) {
         String bundleSymbolicName = content.getContentName();
         Version bundleVersion = content.getExactVersion();

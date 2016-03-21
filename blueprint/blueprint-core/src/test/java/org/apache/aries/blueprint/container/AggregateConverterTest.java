@@ -19,16 +19,25 @@
 package org.apache.aries.blueprint.container;
 
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Constructor;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
 
 import junit.framework.TestCase;
 import org.apache.aries.blueprint.TestBlueprintContainer;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.MyClass;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.MyObject;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.Tata;
+import org.apache.aries.blueprint.pojos.PojoGenerics2.Toto;
 import org.osgi.service.blueprint.container.ReifiedType;
 import org.osgi.service.blueprint.container.Converter;
 
@@ -36,7 +45,7 @@ public class AggregateConverterTest extends TestCase {
 
     private AggregateConverter service;
 
-    protected void setUp() {
+    protected void setUp() throws Exception {
         service = new AggregateConverter(new TestBlueprintContainer(null));
     }
 
@@ -180,10 +189,83 @@ public class AggregateConverterTest extends TestCase {
         s = new AggregateConverter(new TestBlueprintContainer(null));
         s.registerConverter(new AsianRegionConverter());
         s.registerConverter(new EuRegionConverter());
+        s.registerConverter(new NullMarkerConverter());
         
         result = s.convert(new Object(), Region.class);
         // TODO: check with the spec about the result
         //assertTrue(result instanceof AsianRegion || result instanceof EuRegion);
+        result = s.convert(new Object(), NullMarker.class);
+        assertNull(result);
+    }
+
+    public void testGenericWilcard() throws Exception {
+        Constructor cns = MyClass.class.getConstructor(MyObject.class);
+        assertTrue(AggregateConverter.isAssignable(new Toto(), new GenericType(cns.getGenericParameterTypes()[0])));
+
+        cns = Tata.class.getConstructor(MyObject.class);
+        assertTrue(AggregateConverter.isAssignable(new Toto(), new GenericType(cns.getGenericParameterTypes()[0])));
+    }
+
+    public void testGenericAssignable() throws Exception {
+        AggregateConverter s = new AggregateConverter(new TestBlueprintContainer(null));
+
+        assertNotNull(s.convert(new RegionIterable(), new GenericType(Iterable.class, new GenericType(Region.class))));
+
+        try {
+            s.convert(new ArrayList<Region>(), new GenericType(Iterable.class, new GenericType(Region.class)));
+            fail("Conversion should have thrown an exception");
+        } catch (Exception e) {
+            // Ignore
+        }
+
+    }
+
+    public void testGenericCollection() throws Exception {
+        AggregateConverter s = new AggregateConverter(new TestBlueprintContainer(null));
+
+        try {
+            s.convert(new ArrayList(), new GenericType(Iterable.class, new GenericType(Region.class)));
+            fail("Conversion should have thrown an exception");
+        } catch (Exception e) {
+            // Ignore
+        }
+
+        try {
+            s.convert(Arrays.asList(0l), new GenericType(Iterable.class, new GenericType(Region.class)));
+            fail("Conversion should have thrown an exception");
+        } catch (Exception e) {
+            // Ignore
+        }
+
+        assertNotNull(s.convert(Arrays.asList(new EuRegion() {}), new GenericType(List.class, new GenericType(Region.class))));
+    }
+
+    public void testConvertCompatibleCollections() throws Exception {
+        Object org = Arrays.asList(Arrays.asList(1, 2), Arrays.asList(3, 4));
+        Object obj = service.convert(org,
+                GenericType.parse("java.util.List<java.util.List<java.lang.Integer>>", getClass().getClassLoader()));
+        assertSame(org, obj);
+
+        org = Collections.singletonMap("foo", 1);
+        obj = service.convert(org,
+                GenericType.parse("java.util.Map<java.lang.String,java.lang.Integer>", getClass().getClassLoader()));
+        assertSame(org, obj);
+
+        org = new int[] { 1, 2 };
+        obj = service.convert(org,
+                GenericType.parse("int[]", getClass().getClassLoader()));
+        assertSame(org, obj);
+
+        org = new Object[] { 1, 2 };
+        obj = service.convert(org,
+                GenericType.parse("int[]", getClass().getClassLoader()));
+        assertNotSame(org, obj);
+
+        Hashtable<String, Integer> ht = new Hashtable<String, Integer>();
+        ht.put("foo", 1);
+        org = ht;
+        obj = service.convert(org, GenericType.parse("java.util.Dictionary<java.lang.String,java.lang.Integer>", getClass().getClassLoader()));
+        assertSame(org, obj);;
     }
     
     private interface Region {} 
@@ -191,6 +273,8 @@ public class AggregateConverterTest extends TestCase {
     private interface EuRegion extends Region {}
     
     private interface AsianRegion extends Region {}
+
+    private interface NullMarker {}
     
     private static class RegionConverter implements Converter {
         public boolean canConvert(Object fromValue, ReifiedType toType) {
@@ -216,6 +300,21 @@ public class AggregateConverterTest extends TestCase {
         }
         public Object convert(Object source, ReifiedType toType) throws Exception {
             return new AsianRegion() {} ;
+        }
+    }
+
+    private static class NullMarkerConverter implements Converter {
+        public boolean canConvert(Object fromValue, ReifiedType toType) {
+            return toType.getRawClass().isAssignableFrom(NullMarker.class);
+        }
+        public Object convert(Object source, ReifiedType toType) throws Exception {
+            return null;
+        }
+    }
+
+    private static class RegionIterable implements Iterable<Region> {
+        public Iterator<Region> iterator() {
+            return null;
         }
     }
 

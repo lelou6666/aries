@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -17,17 +18,26 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-    <parent>
-        <artifactId>java5-parent</artifactId>
-        <groupId>org.apache.aries</groupId>
-        <version>0.2-incubating</version>
-    </parent>
 
     <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.apache.aries</groupId>
+<<<<<<< HEAD
+        <version>0.2-incubating</version>
+=======
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../parent/pom.xml</relativePath>
+>>>>>>> refs/remotes/apache/trunk
+    </parent>
+
     <groupId>org.apache.aries.web</groupId>
     <artifactId>web</artifactId>
     <packaging>pom</packaging>
+    <version>1.0.0-SNAPSHOT</version>
     <name>Apache Aries Web Component</name>
+<<<<<<< HEAD
     <version>0.3-incubating-SNAPSHOT</version>
 
     <scm>
@@ -35,12 +45,15 @@
         <developerConnection>scm:svn:https://svn.apache.org/repos/asf/incubator/aries/branches/0.2-incubating-RCx/web</developerConnection>
         <url>http://svn.apache.org/viewvc/incubator/aries/branches/0.2-incubating-RCx/web</url>
     </scm>
+=======
+>>>>>>> refs/remotes/apache/trunk
 
     <modules>
         <module>web-urlhandler</module>
         <module>web-itests</module>
     </modules>
 
+<<<<<<< HEAD
     <dependencyManagement>
         <dependencies>
             <!-- internal dependencies -->
@@ -117,4 +130,6 @@
             </plugins>
         </pluginManagement>
     </build>
+=======
+>>>>>>> refs/remotes/apache/trunk
 </project>

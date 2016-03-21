@@ -23,17 +23,24 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import javax.naming.NamingException;
 
+import org.apache.aries.jndi.url.Activator;
 import org.apache.aries.jndi.url.OsgiName;
+import org.apache.aries.proxy.ProxyManager;
+import org.apache.aries.proxy.UnableToProxyException;
+import org.apache.aries.util.nls.MessageUtil;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleEvent;
@@ -107,7 +114,8 @@ public final class ServiceHelper
       BundleContext systemBundle = AccessController.doPrivileged(new PrivilegedAction<BundleContext>() {
         public BundleContext run()
         {
-          return ctx.getBundle(0).getBundleContext();
+        	 Bundle system = ctx.getBundle(0); 
+        	 return system == null ? null : system.getBundleContext(); 
         }
       });
       if (systemBundle == null) systemBundle = ctx;
@@ -157,21 +165,33 @@ public final class ServiceHelper
     private String interfaceName;
     private String filter;
     private boolean dynamic;
+    private int rebindTimeout;
 
     public JNDIServiceDamper(BundleContext context, String i, String f, ServicePair service,
-        boolean d)
+        boolean d, int timeout)
     {
       ctx = context;
       pair = service;
       interfaceName = i;
       filter = f;
       dynamic = d;
+      rebindTimeout = timeout;
     }
 
     public Object call() throws NamingException {
       if (pair == null || pair.ref.getBundle() == null) {
         if (dynamic) {
           pair = findService(ctx, interfaceName, filter);
+          if (pair == null && rebindTimeout > 0) {
+            long startTime = System.currentTimeMillis();
+            try {
+              while (pair == null && System.currentTimeMillis() - startTime < rebindTimeout) {
+                Thread.sleep(100);
+                pair = findService(ctx, interfaceName, filter);
+              }
+            } catch (InterruptedException e) {
+            }
+          }
         } else {
           pair = null;
         }
@@ -193,8 +213,7 @@ public final class ServiceHelper
   /** A cache of proxies returned to the client */
   private static final ConcurrentMap<ServiceKey, WeakReference<Object>> proxyCache = new ConcurrentHashMap<ServiceKey, WeakReference<Object>>();
   private static final CacheClearoutListener cacheClearoutListener = new CacheClearoutListener(proxyCache);
-
-  private static ProxyFactory proxyFactory;
+  private static final MessageUtil MESSAGES = MessageUtil.createMessageUtil(ServiceHelper.class, "org.apache.aries.jndi.nls.jndiUrlMessages");
 
   public static Object getService(BundleContext ctx, OsgiName lookupName, String id,
                                   boolean dynamicRebind, Map<String, Object> env, boolean requireProxy) throws NamingException
@@ -232,7 +251,15 @@ public final class ServiceHelper
     
     if (pair != null) {
       if (requireProxy) {
-        result = proxy(interfaceName, filter, dynamicRebind, ctx, pair);
+        Object obj = env.get(org.apache.aries.jndi.api.JNDIConstants.REBIND_TIMEOUT);
+        int timeout = 0;
+        if (obj instanceof String) {
+          timeout = Integer.parseInt((String)obj);
+        } else if (obj instanceof Integer) {
+          timeout = (Integer)obj;
+        }
+        
+        result = proxy(interfaceName, filter, dynamicRebind, ctx, pair, timeout);
       } else {
         result = pair.service;
       }
@@ -242,7 +269,7 @@ public final class ServiceHelper
   }
 
   private static Object proxy(final String interface1, final String filter, final boolean rebind,
-                              final BundleContext ctx, final ServicePair pair)
+                              final BundleContext ctx, final ServicePair pair, final int timeout)
   {
     Object result = null;
     Bundle owningBundle = ctx.getBundle();
@@ -261,7 +288,7 @@ public final class ServiceHelper
       result = AccessController.doPrivileged(new PrivilegedAction<Object>() {
         public Object run()
         {
-          return proxyPriviledged(interface1, filter, rebind, ctx, pair);
+          return proxyPrivileged(interface1, filter, rebind, ctx, pair, timeout);
         }
       });
 
@@ -275,7 +302,7 @@ public final class ServiceHelper
     return result;
   }
 
-  private static Object proxyPriviledged(String interface1, String filter, boolean dynamicRebind, BundleContext ctx, ServicePair pair)
+  private static Object proxyPrivileged(String interface1, String filter, boolean dynamicRebind, BundleContext ctx, ServicePair pair, int timeout)
   {
     String[] interfaces = null;
     if (interface1 != null) {
@@ -286,33 +313,29 @@ public final class ServiceHelper
 
     List<Class<?>> clazz = new ArrayList<Class<?>>(interfaces.length);
 
-    // We load the interface classes the service is registered under using
-    // the defining
-    // bundle. This is ok because the service must be able to see the
-    // classes to be
-    // registered using them. We then check to see if isAssignableTo on the
-    // reference
-    // works for the owning bundle and the interface name and only use the
-    // interface if
-    // true is returned there.
+    // We load the interface classes the service is registered under using the defining bundle. 
+    // This is ok because the service must be able to see the classes to be registered using them. 
+    // We then check to see if isAssignableTo on the reference  works for the owning bundle and 
+    // the interface name and only use the interface if true is returned there.
 
-    // This might seem odd, but equinox and felix return true for
-    // isAssignableTo if the
-    // Bundle provided does not import the package. This is under the
-    // assumption the
-    // caller will then use reflection. The upshot of doing it this way is
-    // that a utility
-    // bundle can be created which centralizes JNDI lookups, but the service
-    // will be used
-    // by another bundle. It is true that class space consistency is less
-    // safe, but we
+    // This might seem odd, but equinox and felix return true for isAssignableTo if the 
+    // Bundle provided does not import the package. This is under the assumption the
+    // caller will then use reflection. The upshot of doing it this way is that a utility
+    // bundle can be created which centralizes JNDI lookups, but the service will be used
+    // by another bundle. It is true that class space consistency is less safe, but we
     // are enabling a slightly odd use case anyway.
+    
+    // August 13th 2013: We've found valid use cases in which a Bundle is exporting 
+    // services that the Bundle itself cannot load. We deal with this rare case by
+    // noting the classes that we failed to load. If as a result we have no classes 
+    // to proxy, we try those classes again but instead pull the Class objects off 
+    // the service rather than from the bundle exporting that service. 
 
     Bundle serviceProviderBundle = pair.ref.getBundle();
     Bundle owningBundle = ctx.getBundle();
+    ProxyManager proxyManager = Activator.getProxyManager();
 
-    ProxyFactory proxyFactory = getProxyFactory();
-
+    Collection<String> classesNotFound = new ArrayList<String>();
     for (String interfaceName : interfaces) {
       try {
         Class<?> potentialClass = serviceProviderBundle.loadClass(interfaceName);
@@ -320,27 +343,45 @@ public final class ServiceHelper
           clazz.add(potentialClass);
         }
       } catch (ClassNotFoundException e) {
+      	classesNotFound.add(interfaceName);
       }
     }
-
+    
+    if (clazz.isEmpty() && !classesNotFound.isEmpty()) { 
+			Class<?> ifacesOnService[] = ctx.getService(pair.ref).getClass().getInterfaces();
+    	for (String interfaceName : classesNotFound) {
+    		Class<?> thisClass = null;
+    		for (Class<?> c : getAllInterfaces(ifacesOnService)) { 
+    			if (c.getName().equals(interfaceName)) { 
+    				thisClass = c;
+    				break;
+    			}
+    		}
+    		if (thisClass != null) { 
+    			if (pair.ref.isAssignableTo(owningBundle, interfaceName)) {
+    				clazz.add(thisClass);
+    			}
+    		}
+    	}
+    }
+    
     if (clazz.isEmpty()) {
       throw new IllegalArgumentException(Arrays.asList(interfaces).toString());
     }
 
-    Callable<Object> ih = new JNDIServiceDamper(ctx, interface1, filter, pair, dynamicRebind);
+    Callable<Object> ih = new JNDIServiceDamper(ctx, interface1, filter, pair, dynamicRebind, timeout);
 
     // The ClassLoader needs to be able to load the service interface
     // classes so it needs to be
     // wrapping the service provider bundle. The class is actually defined
     // on this adapter.
 
-    Class[] classArray = clazz.toArray(new Class[clazz.size()]);
     try {
-      return proxyFactory.createProxy(serviceProviderBundle, classArray, ih);
-    } catch (IllegalArgumentException e) {
-      throw e;
+      return proxyManager.createDelegatingProxy(serviceProviderBundle, clazz, ih, null);
+    } catch (UnableToProxyException e) {
+      throw new IllegalArgumentException(e);
     } catch (RuntimeException e) {
-      throw new IllegalArgumentException("Unable to create proxy for " + pair.ref, e);
+      throw new IllegalArgumentException(MESSAGES.getMessage("unable.to.create.proxy", pair.ref), e);
     }
   }
 
@@ -392,7 +433,7 @@ public final class ServiceHelper
       refs = ctx.getServiceReferences(interface1, filter);
 
       if (refs == null || refs.length == 0) {
-        refs = ctx.getServiceReferences(null, "(" + JNDIConstants.JNDI_SERVICENAME + "="
+        refs = ctx.getServiceReferences((String) null, "(" + JNDIConstants.JNDI_SERVICENAME + "="
             + serviceName + ')');
       }
     } catch (InvalidSyntaxException e) {
@@ -415,32 +456,28 @@ public final class ServiceHelper
   public static Object getService(BundleContext ctx, ServiceReference ref)
   {
     Object service = ctx.getService(ref);
-
-    Object result = null;
-
-    if (service != null) {
-      ServicePair pair = new ServicePair();
-      pair.ref = ref;
-      pair.service = service;
-
-      result = proxy(null, null, false, ctx, pair);
+    if (service == null) {
+      return null;
     }
 
-    return result;
-  }
-
-  protected static synchronized ProxyFactory getProxyFactory() {
-    if (proxyFactory == null) {
-      try {
-        // Try load load a cglib class (to make sure it's actually available
-        // then create the cglib factory
-        ServiceHelper.class.getClassLoader().loadClass("net.sf.cglib.proxy.Enhancer");
-        proxyFactory = new CgLibProxyFactory();
-      } catch (Throwable t) {
-        proxyFactory = new JdkProxyFactory();
-      }
-    }
-    return proxyFactory;
+    ServicePair pair = new ServicePair();
+    pair.ref = ref;
+    pair.service = service;
+    return proxy(null, null, false, ctx, pair, 0);
   }
  
+  static Collection<Class<?>> getAllInterfaces (Class<?>[] baseInterfaces) 
+  {
+  	Set<Class<?>> result = new HashSet<Class<?>>();
+  	for (Class<?> c : baseInterfaces) {
+  		if (!c.equals(Object.class)) { 
+  			result.add (c);
+  			Class<?> ifaces[] = c.getInterfaces();
+  			if (ifaces.length != 0) { 
+  				result.addAll(getAllInterfaces(ifaces));
+  			}
+  		}
+  	}
+  	return result;
+  }
 }

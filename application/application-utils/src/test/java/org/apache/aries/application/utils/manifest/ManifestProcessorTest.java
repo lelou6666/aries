@@ -31,9 +31,9 @@ import java.util.jar.Manifest;
 
 import org.apache.aries.application.ApplicationMetadata;
 import org.apache.aries.application.Content;
-import org.apache.aries.application.VersionRange;
 import org.apache.aries.application.impl.ApplicationMetadataFactoryImpl;
-import org.apache.aries.application.utils.manifest.ManifestProcessor;
+import org.apache.aries.util.VersionRange;
+import org.apache.aries.util.manifest.ManifestProcessor;
 import org.junit.Test;
 import org.osgi.framework.Version;
 
@@ -85,7 +85,7 @@ public class ManifestProcessorTest
   public void testManifestMetadata() throws Exception
   {
     ApplicationMetadataFactoryImpl manager = new ApplicationMetadataFactoryImpl();
-    InputStream in = getClass().getClassLoader().getResourceAsStream("META-INF/APPLICATION.MF");
+    InputStream in = getClass().getClassLoader().getResourceAsStream("META-INF/APPLICATION.MF");    
     ApplicationMetadata am = manager.parseApplicationMetadata(in);
     assertNotNull(am);
 

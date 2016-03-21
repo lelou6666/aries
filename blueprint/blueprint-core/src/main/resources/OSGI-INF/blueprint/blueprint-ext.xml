@@ -18,12 +18,48 @@
 
 -->
 <blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0" default-activation="lazy">
+<<<<<<< HEAD
+=======
+    <bean id="ExtNamespaceHandler" class="org.apache.aries.blueprint.ext.impl.ExtNamespaceHandler">
+        <property name="bundleContext" ref="blueprintBundleContext"/>
+    </bean>
+>>>>>>> refs/remotes/apache/trunk
 
-    <service interface="org.apache.aries.blueprint.NamespaceHandler">
+    <service ref="ExtNamespaceHandler" interface="org.apache.aries.blueprint.NamespaceHandler">
         <service-properties>
             <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.0.0"/>
         </service-properties>
-        <bean class="org.apache.aries.blueprint.ext.ExtNamespaceHandler"/>
     </service>
-
+    <service ref="ExtNamespaceHandler" interface="org.apache.aries.blueprint.NamespaceHandler">
+        <service-properties>
+            <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.1.0"/>
+        </service-properties>
+    </service>
+    <service ref="ExtNamespaceHandler" interface="org.apache.aries.blueprint.NamespaceHandler">
+        <service-properties>
+            <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.2.0"/>
+        </service-properties>
+    </service>
+    <service ref="ExtNamespaceHandler" interface="org.apache.aries.blueprint.NamespaceHandler">
+        <service-properties>
+            <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.3.0"/>
+        </service-properties>
+    </service>
+    <service ref="ExtNamespaceHandler" interface="org.apache.aries.blueprint.NamespaceHandler">
+        <service-properties>
+            <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.4.0"/>
+        </service-properties>
+    </service>
+    <service ref="ExtNamespaceHandler" interface="org.apache.aries.blueprint.NamespaceHandler">
+        <service-properties>
+            <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.5.0"/>
+        </service-properties>
+    </service>
+    
+    <!-- Also provide the "xml" namespace as a core functionality to avoid many bundles registering a handler for this -->
+    <service ref="ExtNamespaceHandler" interface="org.apache.aries.blueprint.NamespaceHandler">
+        <service-properties>
+            <entry key="osgi.service.blueprint.namespace" value="http://www.w3.org/XML/1998/namespace"/>
+        </service-properties>
+    </service>
 </blueprint>

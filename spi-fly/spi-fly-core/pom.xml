@@ -10,8 +10,6 @@
 
     http://www.apache.org/licenses/LICENSE-2.0
 
-
-
  Unless required by applicable law or agreed to in writing,
  software distributed under the License is distributed on an
  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -19,23 +17,33 @@
  specific language governing permissions and limitations
  under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
-        <groupId>org.apache.aries.spifly</groupId>
-        <artifactId>spifly</artifactId>
-        <version>0.2-incubating-SNAPSHOT</version>
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../../parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>org.apache.aries.spifly.core</artifactId>
-    <packaging>bundle</packaging>
-    <name>Apache Aries SPI Fly Core</name>
+    <groupId>org.apache.aries.spifly</groupId>
+    <artifactId>org.apache.aries.spifly.core-internal</artifactId>
+    <version>1.0.9-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>Apache Aries SPI Fly Core (internal module)</name>
     <description>
-This bundle contains an extender that facilitates the use
-of JRE SPI providers (components typically plugged in to the 
-JRE through META-INF/services resources).
+        This bundle contains an extender that facilitates the use
+        of JRE SPI providers (components typically plugged in to the
+        JRE through META-INF/services resources).
     </description>
+
+    <scm>
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/spi-fly/spi-fly-core</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/spi-fly/spi-fly-core</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/spi-fly/spi-fly-core</url>
+    </scm>
 
     <dependencies>
         <dependency>
@@ -43,6 +51,7 @@ JRE through META-INF/services resources).
             <artifactId>org.osgi.core</artifactId>
             <scope>provided</scope>
         </dependency>
+
         <dependency>
             <groupId>org.osgi</groupId>
             <artifactId>org.osgi.compendium</artifactId>
@@ -50,38 +59,23 @@ JRE through META-INF/services resources).
         </dependency>
 
         <dependency>
-            <groupId>org.easymock</groupId>
-            <artifactId>easymock</artifactId>
+            <groupId>org.apache.aries</groupId>
+            <artifactId>org.apache.aries.util</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>org.easymock</groupId>
-            <artifactId>easymockclassextension</artifactId>
+            <artifactId>easymock</artifactId>
+            <version>3.2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.felix</groupId>
-                <artifactId>maven-bundle-plugin</artifactId>
-                <configuration>
-                    <instructions>
-                        <Import-Package>
-                            *
-                        </Import-Package>
-                        <Export-Package></Export-Package>
-                        <Private-Package>
-                            org.apache.aries.spifly
-                        </Private-Package>
-                        <Bundle-SymbolicName>${pom.artifactId}</Bundle-SymbolicName>
-                        <Bundle-Activator>org.apache.aries.spifly.Activator</Bundle-Activator>
-                    </instructions>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 </project>
-
-

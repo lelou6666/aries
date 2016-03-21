@@ -20,6 +20,8 @@ package org.apache.aries.application;
 
 import java.util.Map;
 
+import org.apache.aries.util.VersionRange;
+
 
 /**
  * A representation of content metadata such as Application-Content, Import-Package, etc
@@ -28,8 +30,8 @@ import java.util.Map;
 public interface Content
 {
   /**
-   * get the package name of the content
-   * @return    the package name of the content
+   * get the content name of the content
+   * @return    the content name of the content
    */
   public String getContentName();
   

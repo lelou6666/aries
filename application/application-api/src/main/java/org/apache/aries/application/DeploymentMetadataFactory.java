@@ -24,10 +24,10 @@ import java.io.InputStream;
 import java.util.Set;
 import java.util.jar.Manifest;
 
-import org.apache.aries.application.filesystem.IFile;
 import org.apache.aries.application.management.AriesApplication;
 import org.apache.aries.application.management.BundleInfo;
 import org.apache.aries.application.management.ResolverException;
+import org.apache.aries.util.filesystem.IFile;
 
 /**
  * Methods for creating a DeploymentMetadata instance
@@ -35,15 +35,27 @@ import org.apache.aries.application.management.ResolverException;
 public interface DeploymentMetadataFactory {
 
   /** 
-   * Create a DeploymentMetadata from an AriesApplication and its by-value bundles. 
+   * Deprecated. Use parseDeploymentManifest(IFile) to create a DeploymentMetadata from an AriesApplication and its by-value bundles. 
    * 
    * @param  app The AriesApplication in question
    * @param  bundleInfo A resolved set of BundleInfo objects
    * @throws ResolverException
    * @return DeploymentMetadata instance
    */
+  @Deprecated
   public DeploymentMetadata createDeploymentMetadata (AriesApplication app, Set<BundleInfo> bundleInfo)
     throws ResolverException;
+  
+  /**
+   * Deprecated. Use parseDeploymentMetadata.
+   * 
+   * @param src DEPLOYMENT.MF file, either in an exploded directory or within a jar file. 
+   * @throws IOException
+   * @return DeploymentMetadata instance
+   */
+  @Deprecated
+  public DeploymentMetadata createDeploymentMetadata (IFile src) throws IOException;
+
   
   /**
    * Extract a DeploymentMetadata instance from an IFile
@@ -52,8 +64,18 @@ public interface DeploymentMetadataFactory {
    * @throws IOException
    * @return DeploymentMetadata instance
    */
-  public DeploymentMetadata createDeploymentMetadata (IFile src) throws IOException;
+  public DeploymentMetadata parseDeploymentMetadata (IFile src) throws IOException;
   
+  /**
+   * Deprecated. Use parseDeploymentMetadata.
+   * 
+   * @param in InputStream
+   * @throws IOException
+   * @return DeploymentMetadata instance
+   */
+  @Deprecated
+  public DeploymentMetadata createDeploymentMetadata (InputStream in) throws IOException;
+
   /**
    * Extract a DeploymentMetadata instance from InputStream.
    * 
@@ -61,7 +83,7 @@ public interface DeploymentMetadataFactory {
    * @throws IOException
    * @return DeploymentMetadata instance
    */
-  public DeploymentMetadata createDeploymentMetadata (InputStream in) throws IOException;
+  public DeploymentMetadata parseDeploymentMetadata (InputStream in) throws IOException;
   
   /**
    * Extract a DeploymentMetadata instance from Manifest.
@@ -71,5 +93,5 @@ public interface DeploymentMetadataFactory {
    * @return DeploymentMetadata instance
    */
   public DeploymentMetadata createDeploymentMetadata (Manifest manifest) throws IOException;
-  
+
 }

@@ -24,22 +24,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
-
-import org.w3c.dom.CharacterData;
-import org.w3c.dom.Comment;
-import org.w3c.dom.Element;
-import org.w3c.dom.EntityReference;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 import org.apache.aries.blueprint.ComponentDefinitionRegistry;
 import org.apache.aries.blueprint.NamespaceHandler;
 import org.apache.aries.blueprint.ParserContext;
-import org.apache.aries.blueprint.container.Parser;
-import org.apache.aries.blueprint.container.ParserContextImpl;
-import org.apache.aries.blueprint.container.ServiceListener;
-import org.apache.aries.blueprint.ext.ExtNamespaceHandler;
 import org.apache.aries.blueprint.ext.PlaceholdersUtils;
 import org.apache.aries.blueprint.mutable.MutableBeanMetadata;
 import org.apache.aries.blueprint.mutable.MutableCollectionMetadata;
@@ -47,7 +37,11 @@ import org.apache.aries.blueprint.mutable.MutableComponentMetadata;
 import org.apache.aries.blueprint.mutable.MutableIdRefMetadata;
 import org.apache.aries.blueprint.mutable.MutableMapMetadata;
 import org.apache.aries.blueprint.mutable.MutableRefMetadata;
+import org.apache.aries.blueprint.mutable.MutableReferenceMetadata;
 import org.apache.aries.blueprint.mutable.MutableValueMetadata;
+import org.apache.aries.blueprint.utils.ServiceListener;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.FrameworkUtil;
 import org.osgi.service.blueprint.container.ComponentDefinitionException;
 import org.osgi.service.blueprint.reflect.BeanMetadata;
 import org.osgi.service.blueprint.reflect.BeanProperty;
@@ -57,12 +51,19 @@ import org.osgi.service.blueprint.reflect.IdRefMetadata;
 import org.osgi.service.blueprint.reflect.MapMetadata;
 import org.osgi.service.blueprint.reflect.Metadata;
 import org.osgi.service.blueprint.reflect.RefMetadata;
+import org.osgi.service.blueprint.reflect.ReferenceMetadata;
 import org.osgi.service.blueprint.reflect.RegistrationListener;
 import org.osgi.service.blueprint.reflect.ServiceMetadata;
 import org.osgi.service.blueprint.reflect.ValueMetadata;
 import org.osgi.service.cm.ConfigurationAdmin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.w3c.dom.CharacterData;
+import org.w3c.dom.Comment;
+import org.w3c.dom.Element;
+import org.w3c.dom.EntityReference;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * Namespace handler for the Config Admin service.
@@ -79,7 +80,16 @@ import org.slf4j.LoggerFactory;
 public class CmNamespaceHandler implements NamespaceHandler {
 
     public static final String BLUEPRINT_NAMESPACE = "http://www.osgi.org/xmlns/blueprint/v1.0.0";
-    public static final String BLUEPRINT_CM_NAMESPACE = "http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.0.0";
+    public static final String BLUEPRINT_CM_NAMESPACE_1_0 = "http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.0.0";
+    public static final String BLUEPRINT_CM_NAMESPACE_1_1 = "http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.1.0";
+    public static final String BLUEPRINT_CM_NAMESPACE_1_2 = "http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.2.0";
+    public static final String BLUEPRINT_CM_NAMESPACE_1_3 = "http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.3.0";
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_0 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.0.0";
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_1 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.1.0";
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_2 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.2.0";
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_3 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.3.0";
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_4 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.4.0";
+    public static final String BLUEPRINT_EXT_NAMESPACE_V1_5 = "http://aries.apache.org/blueprint/xmlns/blueprint-ext/v1.5.0";
 
     public static final String PROPERTY_PLACEHOLDER_ELEMENT = "property-placeholder";
     public static final String MANAGED_PROPERTIES_ELEMENT = "managed-properties";
@@ -90,8 +100,12 @@ public class CmNamespaceHandler implements NamespaceHandler {
     public static final String INTERFACES_ELEMENT = "interfaces";
     public static final String VALUE_ELEMENT = "value";
     public static final String MANAGED_COMPONENT_ELEMENT = "managed-component";
+    public static final String LOCATION_ELEMENT = "location";
+    public static final String SERVICE_PROPERTIES_ELEMENT = "service-properties";
+    public static final String REGISTRATION_LISTENER_ELEMENT = "registration-listener";
 
     public static final String ID_ATTRIBUTE = "id";
+    public static final String SYSTEM_PROPERTIES_NEVER = "never";
     public static final String PERSISTENT_ID_ATTRIBUTE = "persistent-id";
     public static final String PLACEHOLDER_PREFIX_ATTRIBUTE = "placeholder-prefix";
     public static final String PLACEHOLDER_SUFFIX_ATTRIBUTE = "placeholder-suffix";
@@ -103,6 +117,8 @@ public class CmNamespaceHandler implements NamespaceHandler {
     public static final String RANKING_ATTRIBUTE = "ranking";
     public static final String INTERFACE_ATTRIBUTE = "interface";
     public static final String UPDATE_ATTRIBUTE = "update";
+    public static final String SYSTEM_PROPERTIES_ATTRIBUTE = "system-properties";
+    public static final String IGNORE_MISSING_LOCATIONS_ATTRIBUTE = "ignore-missing-locations";
 
     public static final String AUTO_EXPORT_DISABLED = "disabled";
     public static final String AUTO_EXPORT_INTERFACES = "interfaces";
@@ -134,11 +150,30 @@ public class CmNamespaceHandler implements NamespaceHandler {
     }
 
     public void setConfigAdmin(ConfigurationAdmin configAdmin) {
-        this.configAdmin = configAdmin;
+        CmNamespaceHandler.configAdmin = configAdmin;
     }
 
     public URL getSchemaLocation(String namespace) {
-        return getClass().getResource("blueprint-cm.xsd");
+        if (BLUEPRINT_CM_NAMESPACE_1_3.equals(namespace)) {
+            return getClass().getResource("blueprint-cm-1.3.0.xsd");
+        } else if (BLUEPRINT_CM_NAMESPACE_1_2.equals(namespace)) {
+            return getClass().getResource("blueprint-cm-1.2.0.xsd");
+        } else if (BLUEPRINT_CM_NAMESPACE_1_1.equals(namespace)) {
+            return getClass().getResource("blueprint-cm-1.1.0.xsd");
+        } else if (BLUEPRINT_CM_NAMESPACE_1_0.equals(namespace)) {
+            return getClass().getResource("blueprint-cm-1.0.0.xsd");
+        } else if (namespace.startsWith("http://aries.apache.org/blueprint/xmlns/blueprint-ext")) {
+            try {
+                Bundle extBundle = FrameworkUtil.getBundle(PlaceholdersUtils.class);
+                Class<?> extNsHandlerClazz = extBundle.loadClass("org.apache.aries.blueprint.ext.impl.ExtNamespaceHandler");
+                return ((NamespaceHandler) extNsHandlerClazz.newInstance()).getSchemaLocation(namespace);
+            } catch (Throwable t) {
+                LOGGER.warn("Could not locate ext namespace schema", t);
+                return null;
+            }
+        } else {
+            return null;
+        }
     }
 
     public Set<Class> getManagedClasses() {
@@ -158,6 +193,8 @@ public class CmNamespaceHandler implements NamespaceHandler {
             return parsePropertyPlaceholder(context, element);
         } else if (nodeNameEquals(element, MANAGED_SERVICE_FACTORY_ELEMENT)) {
             return parseManagedServiceFactory(context, element);
+        } else if (nodeNameEquals(element, CM_PROPERTIES_ELEMENT)) {
+            return parseCmProperties(context, element);
         } else {
             throw new ComponentDefinitionException("Unsupported element: " + element.getNodeName());
         }
@@ -180,14 +217,45 @@ public class CmNamespaceHandler implements NamespaceHandler {
         }
     }
 
+    private ComponentMetadata parseCmProperties(ParserContext context, Element element) {
+        String id = getId(context, element);
+
+        MutableBeanMetadata factoryMetadata = context.createMetadata(MutableBeanMetadata.class);
+        generateIdIfNeeded(context, factoryMetadata);
+        factoryMetadata.setScope(BeanMetadata.SCOPE_SINGLETON);
+        factoryMetadata.setRuntimeClass(CmProperties.class);
+        factoryMetadata.setInitMethod("init");
+        factoryMetadata.setDestroyMethod("destroy");
+        factoryMetadata.addProperty("blueprintContainer", createRef(context, "blueprintContainer"));
+        factoryMetadata.addProperty("configAdmin", createConfigurationAdminRef(context));
+        factoryMetadata.addProperty("managedObjectManager", createRef(context, MANAGED_OBJECT_MANAGER_NAME));
+        String persistentId = element.getAttribute(PERSISTENT_ID_ATTRIBUTE);
+        factoryMetadata.addProperty("persistentId", createValue(context, persistentId));
+        context.getComponentDefinitionRegistry().registerComponentDefinition(factoryMetadata);
+
+        MutableBeanMetadata propertiesMetadata = context.createMetadata(MutableBeanMetadata.class);
+        propertiesMetadata.setId(id);
+        propertiesMetadata.setScope(BeanMetadata.SCOPE_SINGLETON);
+        propertiesMetadata.setRuntimeClass(Properties.class);
+        propertiesMetadata.setFactoryComponent(createRef(context, factoryMetadata.getId()));
+        propertiesMetadata.setFactoryComponent(factoryMetadata);
+        propertiesMetadata.setFactoryMethod("getProperties");
+        // Work around ARIES-877
+        propertiesMetadata.setDependsOn(Arrays.asList(factoryMetadata.getId()));
+
+        return propertiesMetadata;
+    }
+
     private ComponentMetadata parsePropertyPlaceholder(ParserContext context, Element element) {
         MutableBeanMetadata metadata = context.createMetadata(MutableBeanMetadata.class);
         metadata.setProcessor(true);
         metadata.setId(getId(context, element));
         metadata.setScope(BeanMetadata.SCOPE_SINGLETON);
         metadata.setRuntimeClass(CmPropertyPlaceholder.class);
+        metadata.setInitMethod("init");
+        metadata.setDestroyMethod("destroy");
         metadata.addProperty("blueprintContainer", createRef(context, "blueprintContainer"));
-        metadata.addProperty("configAdmin", createConfigAdminProxy(context));
+        metadata.addProperty("configAdmin", createConfigurationAdminRef(context));
         metadata.addProperty("persistentId", createValue(context, element.getAttribute(PERSISTENT_ID_ATTRIBUTE)));
         String prefix = element.hasAttribute(PLACEHOLDER_PREFIX_ATTRIBUTE)
                                     ? element.getAttribute(PLACEHOLDER_PREFIX_ATTRIBUTE)
@@ -201,17 +269,20 @@ public class CmNamespaceHandler implements NamespaceHandler {
         if (defaultsRef != null) {
             metadata.addProperty("defaultProperties", createRef(context, defaultsRef));
         }
-        String ignoreMissingLocations = element.hasAttributeNS(ExtNamespaceHandler.BLUEPRINT_EXT_NAMESPACE, ExtNamespaceHandler.IGNORE_MISSING_LOCATIONS_ATTRIBUTE)
-                ? element.getAttributeNS(ExtNamespaceHandler.BLUEPRINT_EXT_NAMESPACE, ExtNamespaceHandler.IGNORE_MISSING_LOCATIONS_ATTRIBUTE) : null;
+        String ignoreMissingLocations = extractIgnoreMissingLocations(element);
         if (ignoreMissingLocations != null) {
             metadata.addProperty("ignoreMissingLocations", createValue(context, ignoreMissingLocations));
         }
-        String systemProperties = element.hasAttributeNS(ExtNamespaceHandler.BLUEPRINT_EXT_NAMESPACE, ExtNamespaceHandler.SYSTEM_PROPERTIES_ATTRIBUTE)
-                ? element.getAttributeNS(ExtNamespaceHandler.BLUEPRINT_EXT_NAMESPACE, ExtNamespaceHandler.SYSTEM_PROPERTIES_ATTRIBUTE) : null;
+        String systemProperties = extractSystemPropertiesAttribute(element);
         if (systemProperties == null) {
-            systemProperties = ExtNamespaceHandler.SYSTEM_PROPERTIES_NEVER;
+            systemProperties = SYSTEM_PROPERTIES_NEVER;
         }
         metadata.addProperty("systemProperties", createValue(context, systemProperties));
+        String updateStrategy = element.getAttribute(UPDATE_STRATEGY_ATTRIBUTE);
+        if (updateStrategy != null) {
+            metadata.addProperty("updateStrategy", createValue(context, updateStrategy));
+        }
+        metadata.addProperty("managedObjectManager", createRef(context, MANAGED_OBJECT_MANAGER_NAME));
         // Parse elements
         List<String> locations = new ArrayList<String>();
         NodeList nl = element.getChildNodes();
@@ -219,7 +290,7 @@ public class CmNamespaceHandler implements NamespaceHandler {
             Node node = nl.item(i);
             if (node instanceof Element) {
                 Element e = (Element) node;
-                if (BLUEPRINT_CM_NAMESPACE.equals(e.getNamespaceURI())) {
+                if (isCmNamespace(e.getNamespaceURI())) {
                     if (nodeNameEquals(e, DEFAULT_PROPERTIES_ELEMENT)) {
                         if (defaultsRef != null) {
                             throw new ComponentDefinitionException("Only one of " + DEFAULTS_REF_ATTRIBUTE + " attribute or " + DEFAULT_PROPERTIES_ELEMENT + " element is allowed");
@@ -227,11 +298,11 @@ public class CmNamespaceHandler implements NamespaceHandler {
                         Metadata props = parseDefaultProperties(context, metadata, e);
                         metadata.addProperty("defaultProperties", props);
                     }
-                } else if (ExtNamespaceHandler.BLUEPRINT_EXT_NAMESPACE.equals(e.getNamespaceURI())) {
-                    if (nodeNameEquals(e, ExtNamespaceHandler.LOCATION_ELEMENT)) {
+                } else if (isExtNamespace(e.getNamespaceURI())) {
+                    if (nodeNameEquals(e, LOCATION_ELEMENT)) {
                         locations.add(getTextValue(e));
                     }
-                }
+                } 
             }
         }
         if (!locations.isEmpty()) {
@@ -243,6 +314,43 @@ public class CmNamespaceHandler implements NamespaceHandler {
         return metadata;
     }
 
+    private String extractSystemPropertiesAttribute(Element element) {
+      String systemProperties = null;
+      
+      if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_0, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_0, SYSTEM_PROPERTIES_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_1, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_1, SYSTEM_PROPERTIES_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_2, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_2, SYSTEM_PROPERTIES_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_3, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_3, SYSTEM_PROPERTIES_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_4, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_4, SYSTEM_PROPERTIES_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_5, SYSTEM_PROPERTIES_ATTRIBUTE)) {
+        systemProperties =  element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_5, SYSTEM_PROPERTIES_ATTRIBUTE);
+      }
+      return systemProperties;
+    }
+
+    private String extractIgnoreMissingLocations(Element element) {
+      String ignoreMissingLocations = null;
+      if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_0, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_0, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_1, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_1, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_2, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_2, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_3, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_3, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_4, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_4, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      } else if (element.hasAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_5, IGNORE_MISSING_LOCATIONS_ATTRIBUTE)) {
+        ignoreMissingLocations = element.getAttributeNS(BLUEPRINT_EXT_NAMESPACE_V1_5, IGNORE_MISSING_LOCATIONS_ATTRIBUTE);
+      }
+      return ignoreMissingLocations;
+    }
+
     private Metadata parseDefaultProperties(ParserContext context, MutableBeanMetadata enclosingComponent, Element element) {
         MutableMapMetadata props = context.createMetadata(MutableMapMetadata.class);
         NodeList nl = element.getChildNodes();
@@ -250,7 +358,7 @@ public class CmNamespaceHandler implements NamespaceHandler {
             Node node = nl.item(i);
             if (node instanceof Element) {
                 Element e = (Element) node;
-                if (BLUEPRINT_CM_NAMESPACE.equals(e.getNamespaceURI())) {
+                if (isCmNamespace(e.getNamespaceURI())) {
                     if (nodeNameEquals(e, PROPERTY_ELEMENT)) {
                         BeanProperty prop = context.parseElement(BeanProperty.class, enclosingComponent, e);
                         props.addEntry(createValue(context, prop.getName(), String.class.getName()), prop.getValue());
@@ -271,8 +379,7 @@ public class CmNamespaceHandler implements NamespaceHandler {
         factoryMetadata.setRuntimeClass(CmManagedServiceFactory.class);
         factoryMetadata.setInitMethod("init");
         factoryMetadata.setDestroyMethod("destroy");
-        factoryMetadata.addProperty("configAdmin", createConfigAdminProxy(context));
-        factoryMetadata.addProperty("blueprintContainer", createRef(context, "blueprintContainer"));
+        factoryMetadata.addArgument(createRef(context, "blueprintContainer"), null, 0);
         factoryMetadata.addProperty("factoryPid", createValue(context, element.getAttribute(FACTORY_PID_ATTRIBUTE)));
         String autoExport = element.hasAttribute(AUTO_EXPORT_ATTRIBUTE) ? element.getAttribute(AUTO_EXPORT_ATTRIBUTE) : AUTO_EXPORT_DEFAULT;
         if (AUTO_EXPORT_DISABLED.equals(autoExport)) {
@@ -295,9 +402,7 @@ public class CmNamespaceHandler implements NamespaceHandler {
             interfaces = Collections.singletonList(element.getAttribute(INTERFACE_ATTRIBUTE));
             factoryMetadata.addProperty("interfaces", createList(context, interfaces));
         }
-
-        Parser parser = getParser(context);
-        
+       
         // Parse elements
         List<RegistrationListener> listeners = new ArrayList<RegistrationListener>();
         NodeList nl = element.getChildNodes();
@@ -308,17 +413,28 @@ public class CmNamespaceHandler implements NamespaceHandler {
                 if (isBlueprintNamespace(e.getNamespaceURI())) {
                     if (nodeNameEquals(e, INTERFACES_ELEMENT)) {
                         if (interfaces != null) {
-                            throw new ComponentDefinitionException("Only one of " + Parser.INTERFACE_ATTRIBUTE + " attribute or " + INTERFACES_ELEMENT + " element must be used");
+                            throw new ComponentDefinitionException("Only one of " + INTERFACE_ATTRIBUTE + " attribute or " + INTERFACES_ELEMENT + " element must be used");
                         }
                         interfaces = parseInterfaceNames(e);
                         factoryMetadata.addProperty("interfaces", createList(context, interfaces));                    
-                    } else if (nodeNameEquals(e, Parser.SERVICE_PROPERTIES_ELEMENT)) { 
-                        MapMetadata map = parser.parseServiceProperties(e, factoryMetadata);
+                    } else if (nodeNameEquals(e, SERVICE_PROPERTIES_ELEMENT)) { 
+                        MapMetadata map = context.parseElement(MapMetadata.class,
+                            factoryMetadata, e);
                         factoryMetadata.addProperty("serviceProperties", map);
-                    } else if (nodeNameEquals(e, Parser.REGISTRATION_LISTENER_ELEMENT)) {
-                        listeners.add(parser.parseRegistrationListener(e, factoryMetadata));
+                        NodeList enl = e.getChildNodes();
+                        for (int j = 0; j < enl.getLength(); j++) {
+                            Node enode = enl.item(j);
+                            if (enode instanceof Element) {
+                                if (isCmNamespace(enode.getNamespaceURI()) && nodeNameEquals(enode, CM_PROPERTIES_ELEMENT)) {
+                                    decorateCmProperties(context, (Element) enode, factoryMetadata);
+                                }
+                            }
+                        }
+                    } else if (nodeNameEquals(e, REGISTRATION_LISTENER_ELEMENT)) {
+                        listeners.add(context.parseElement(RegistrationListener.class,
+                            factoryMetadata, e));
                     }
-                } else if (BLUEPRINT_CM_NAMESPACE.equals(e.getNamespaceURI())) {
+                } else if (isCmNamespace(e.getNamespaceURI())) {
                     if (nodeNameEquals(e, MANAGED_COMPONENT_ELEMENT)) {
                         MutableBeanMetadata managedComponent = context.parseElement(MutableBeanMetadata.class, null, e);
                         generateIdIfNeeded(context, managedComponent);
@@ -374,7 +490,7 @@ public class CmNamespaceHandler implements NamespaceHandler {
             metadata.setDestroyMethod("destroy");
         }
         metadata.addProperty("blueprintContainer", createRef(context, "blueprintContainer"));
-        metadata.addProperty("configAdmin", createConfigAdminProxy(context));
+        metadata.addProperty("configAdmin", createConfigurationAdminRef(context));
         metadata.addProperty("managedObjectManager", createRef(context, MANAGED_OBJECT_MANAGER_NAME));
         metadata.addProperty("persistentId", createValue(context, persistentId));
         if (element.hasAttribute(UPDATE_ATTRIBUTE)) {
@@ -403,7 +519,7 @@ public class CmNamespaceHandler implements NamespaceHandler {
             metadata.setDestroyMethod("destroy");
         }
         metadata.addProperty("blueprintContainer", createRef(context, "blueprintContainer"));
-        metadata.addProperty("configAdmin", createConfigAdminProxy(context));
+        metadata.addProperty("configAdmin", createConfigurationAdminRef(context));
         metadata.addProperty("managedObjectManager", createRef(context, MANAGED_OBJECT_MANAGER_NAME));
         metadata.addProperty("persistentId", createValue(context, persistentId));
         String updateStrategy = element.getAttribute(UPDATE_STRATEGY_ATTRIBUTE);
@@ -420,22 +536,6 @@ public class CmNamespaceHandler implements NamespaceHandler {
         return component;
     }
 
-    /**
-     * Create a reference to the ConfigurationAdmin service if not already done
-     * and add it to the registry.
-     *
-     * @param context the parser context
-     * @return a metadata pointing to the config admin
-     */
-    private Metadata createConfigAdminProxy(ParserContext context) {
-        MutableBeanMetadata bean = context.createMetadata(MutableBeanMetadata.class);
-        bean.setRuntimeClass(CmNamespaceHandler.class);
-        bean.setFactoryMethod("getConfigAdmin");
-        bean.setActivation(MutableBeanMetadata.ACTIVATION_LAZY);
-        bean.setScope(MutableBeanMetadata.SCOPE_PROTOTYPE);
-        return bean;
-    }
-
     private void registerManagedObjectManager(ParserContext context, ComponentDefinitionRegistry registry) {
         if (registry.getComponentDefinition(MANAGED_OBJECT_MANAGER_NAME) == null) {
             MutableBeanMetadata beanMetadata = context.createMetadata(MutableBeanMetadata.class);
@@ -444,6 +544,10 @@ public class CmNamespaceHandler implements NamespaceHandler {
             beanMetadata.setRuntimeClass(ManagedObjectManager.class);            
             registry.registerComponentDefinition(beanMetadata);
         }
+    }
+    
+    private MutableReferenceMetadata createConfigurationAdminRef(ParserContext context) {
+        return createServiceRef(context, ConfigurationAdmin.class, null);
     }
     
     private static ValueMetadata createValue(ParserContext context, String value) {
@@ -460,6 +564,20 @@ public class CmNamespaceHandler implements NamespaceHandler {
     private static RefMetadata createRef(ParserContext context, String value) {
         MutableRefMetadata m = context.createMetadata(MutableRefMetadata.class);
         m.setComponentId(value);
+        return m;
+    }
+    
+    private MutableReferenceMetadata createServiceRef(ParserContext context, Class<?> cls, String filter) {
+        MutableReferenceMetadata m = context.createMetadata(MutableReferenceMetadata.class);
+        m.setRuntimeInterface(cls);
+        m.setInterface(cls.getName());
+        m.setActivation(ReferenceMetadata.ACTIVATION_EAGER);
+        m.setAvailability(ReferenceMetadata.AVAILABILITY_MANDATORY);
+        
+        if (filter != null) {
+            m.setFilter(filter);
+        }
+        
         return m;
     }
 
@@ -499,6 +617,21 @@ public class CmNamespaceHandler implements NamespaceHandler {
         return BLUEPRINT_NAMESPACE.equals(ns);
     }
 
+    public static boolean isCmNamespace(String uri) {
+        return BLUEPRINT_CM_NAMESPACE_1_0.equals(uri)
+                || BLUEPRINT_CM_NAMESPACE_1_1.equals(uri)
+                || BLUEPRINT_CM_NAMESPACE_1_2.equals(uri)
+                || BLUEPRINT_CM_NAMESPACE_1_3.equals(uri);
+    }
+
+    public static boolean isExtNamespace(String uri) {
+        return BLUEPRINT_EXT_NAMESPACE_V1_0.equals(uri)
+                || BLUEPRINT_EXT_NAMESPACE_V1_1.equals(uri)
+                || BLUEPRINT_EXT_NAMESPACE_V1_2.equals(uri)
+                || BLUEPRINT_EXT_NAMESPACE_V1_3.equals(uri)
+                || BLUEPRINT_EXT_NAMESPACE_V1_4.equals(uri);
+    }
+
     public String getId(ParserContext context, Element element) {
         if (element.hasAttribute(ID_ATTRIBUTE)) {
             return element.getAttribute(ID_ATTRIBUTE);
@@ -521,13 +654,6 @@ public class CmNamespaceHandler implements NamespaceHandler {
         return id;
     }
     
-    private Parser getParser(ParserContext ctx) {
-        if (ctx instanceof ParserContextImpl) {
-            return ((ParserContextImpl) ctx).getParser();
-        }
-        throw new RuntimeException("Unable to get parser");
-    }
-
     public List<String> parseInterfaceNames(Element element) {
         List<String> interfaceNames = new ArrayList<String>();
         NodeList nl = element.getChildNodes();
@@ -548,5 +674,4 @@ public class CmNamespaceHandler implements NamespaceHandler {
         }
         return interfaceNames;
     }
-
 }

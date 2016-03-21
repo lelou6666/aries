@@ -18,9 +18,8 @@
  */
 package org.apache.aries.blueprint.container;
 
-import static org.apache.aries.blueprint.utils.ReflectionUtils.getRealCause;
-
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
@@ -32,29 +31,93 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.aries.blueprint.BeanProcessor;
 import org.apache.aries.blueprint.ComponentDefinitionRegistry;
-import org.apache.aries.blueprint.ExtendedBlueprintContainer;
 import org.apache.aries.blueprint.Interceptor;
 import org.apache.aries.blueprint.di.AbstractRecipe;
 import org.apache.aries.blueprint.di.Recipe;
-import org.apache.aries.blueprint.proxy.AsmInterceptorWrapper;
-import org.apache.aries.blueprint.proxy.CgLibInterceptorWrapper;
+import org.apache.aries.blueprint.proxy.CollaboratorFactory;
+import org.apache.aries.blueprint.proxy.ProxyUtils;
+import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
 import org.apache.aries.blueprint.utils.ReflectionUtils;
 import org.apache.aries.blueprint.utils.ReflectionUtils.PropertyDescriptor;
+import org.apache.aries.proxy.UnableToProxyException;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.FrameworkUtil;
 import org.osgi.service.blueprint.container.ComponentDefinitionException;
 import org.osgi.service.blueprint.container.ReifiedType;
 import org.osgi.service.blueprint.reflect.BeanMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.aries.blueprint.utils.ReflectionUtils.getPublicMethods;
+import static org.apache.aries.blueprint.utils.ReflectionUtils.getRealCause;
+
 /**
  * A <code>Recipe</code> to create POJOs.
  *
  * @version $Rev$, $Date$
  */
+@SuppressWarnings("rawtypes")
 public class BeanRecipe extends AbstractRecipe {
+
+    static class UnwrapperedBeanHolder {
+        final Object unwrapperedBean;
+        final BeanRecipe recipe;
+
+        public UnwrapperedBeanHolder(Object unwrapperedBean, BeanRecipe recipe) {
+            this.unwrapperedBean = unwrapperedBean;
+            this.recipe = recipe;
+        }
+    }
+
+    public class VoidableCallable implements Callable<Object>, Voidable {
+
+        private final AtomicReference<Object> ref = new AtomicReference<Object>();
+        
+        private final Semaphore sem = new Semaphore(1);
+        
+        private final ThreadLocal<Object> deadlockDetector = new ThreadLocal<Object>();
+        
+        public void voidReference() {
+            ref.set(null);
+        }
+
+        public Object call() throws ComponentDefinitionException {
+            Object o = ref.get();
+            
+            if (o == null) {
+                if(deadlockDetector.get() != null) {
+                    deadlockDetector.remove();
+                    throw new ComponentDefinitionException("Construction cycle detected for bean " + name);
+                }
+                
+                sem.acquireUninterruptibly();
+                try {
+                    o = ref.get();
+                    if (o == null) {
+                        deadlockDetector.set(this);
+                        try {
+                            o = internalCreate2();
+                            ref.set(o);
+                        } finally {
+                            deadlockDetector.remove();
+                        }
+                    }
+                } finally {
+                  sem.release();
+                }
+            }
+            
+            return o;
+        }
+
+    }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BeanRecipe.class);
 
@@ -166,6 +229,9 @@ public class BeanRecipe extends AbstractRecipe {
                 recipes.add(recipe);
             }
         }
+        if (factory != null) {
+            recipes.add(factory);
+        }
         recipes.addAll(getConstructorDependencies());
         return recipes; 
     }
@@ -191,8 +257,6 @@ public class BeanRecipe extends AbstractRecipe {
     }
 
     private Object getInstance() throws ComponentDefinitionException {
-        Object instance;
-        
         // Instanciate arguments
         List<Object> args = new ArrayList<Object>();
         List<ReifiedType> argTypes = new ArrayList<ReifiedType>();
@@ -209,76 +273,103 @@ public class BeanRecipe extends AbstractRecipe {
                 }
             }
         }
-
+        
         if (factory != null) {
-            // look for instance method on factory object
-            Object factoryObj = factory.create();
-            
-            // If the factory is a service reference, we need to get hold of the actual proxy for the service
-            if (factoryObj instanceof ReferenceRecipe.ServiceProxyWrapper) {
-                try {
-                    factoryObj = ((ReferenceRecipe.ServiceProxyWrapper) factoryObj).convert(new ReifiedType(Object.class));
-                } catch (Exception e) {
-                    throw new ComponentDefinitionException("Error when instantiating bean " + getName() + " of class " + getType(), getRealCause(e));
-                }
-            }
-            
-            // Map of matching methods
-            Map<Method, List<Object>> matches = findMatchingMethods(factoryObj.getClass(), factoryMethod, true, args, argTypes);
-            if (matches.size() == 1) {
-                try {
-                    Map.Entry<Method, List<Object>> match = matches.entrySet().iterator().next();
-                    instance = invoke(match.getKey(), factoryObj, match.getValue().toArray());
-                } catch (Throwable e) {
-                    throw new ComponentDefinitionException("Error when instantiating bean " + getName() + " of class " + getType(), getRealCause(e));
-                }
-            } else if (matches.size() == 0) {
-                throw new ComponentDefinitionException("Unable to find a matching factory method " + factoryMethod + " on class " + factoryObj.getClass().getName() + " for arguments " + args + " when instanciating bean " + getName());
-            } else {
-                throw new ComponentDefinitionException("Multiple matching factory methods " + factoryMethod + " found on class " + factoryObj.getClass().getName() + " for arguments " + args + " when instanciating bean " + getName() + ": " + matches.keySet());
-            }
+            return getInstanceFromFactory(args, argTypes);
         } else if (factoryMethod != null) {
-            // Map of matching methods
-            Map<Method, List<Object>> matches = findMatchingMethods(getType(), factoryMethod, false, args, argTypes);
-            if (matches.size() == 1) {
-                try {
-                    Map.Entry<Method, List<Object>> match = matches.entrySet().iterator().next();
-                    instance = invoke(match.getKey(), null, match.getValue().toArray());
-                } catch (Throwable e) {
-                    throw new ComponentDefinitionException("Error when instanciating bean " + getName() + " of class " + getType(), getRealCause(e));
-                }
-            } else if (matches.size() == 0) {
-                throw new ComponentDefinitionException("Unable to find a matching factory method " + factoryMethod + " on class " + getType().getName() + " for arguments " + args + " when instanciating bean " + getName());
-            } else {
-                throw new ComponentDefinitionException("Multiple matching factory methods " + factoryMethod + " found on class " + getType().getName() + " for arguments " + args + " when instanciating bean " + getName() + ": " + matches.keySet());
-            }
+            return getInstanceFromStaticFactory(args, argTypes);
         } else {
-            if (getType() == null) {
-                throw new ComponentDefinitionException("No factoryMethod nor class is defined for this bean");
-            }
-            // Map of matching constructors
-            Map<Constructor, List<Object>> matches = findMatchingConstructors(getType(), args, argTypes);
-            if (matches.size() == 1) {
-                try {
-                    Map.Entry<Constructor, List<Object>> match = matches.entrySet().iterator().next();
-                    instance = newInstance(match.getKey(), match.getValue().toArray());
-                } catch (Throwable e) {
-                    throw new ComponentDefinitionException("Error when instanciating bean " + getName() + " of class " + getType(), getRealCause(e));
-                }
-            } else if (matches.size() == 0) {
-                throw new ComponentDefinitionException("Unable to find a matching constructor on class " + getType().getName() + " for arguments " + args + " when instanciating bean " + getName());
-            } else {
-                throw new ComponentDefinitionException("Multiple matching constructors found on class " + getType().getName() + " for arguments " + args + " when instanciating bean " + getName() + ": " + matches.keySet());
-            }
+            return getInstanceFromType(args, argTypes);
         }
         
-        return instance;
+    }
+    
+    private Object getInstanceFromFactory(List<Object> args, List<ReifiedType> argTypes) {
+        Object factoryObj = getFactoryObj();
+        
+        // Map of matching methods
+        Map<Method, List<Object>> matches = findMatchingMethods(factoryObj.getClass(), factoryMethod, true, args, argTypes);
+        if (matches.size() == 1) {
+            try {
+                Map.Entry<Method, List<Object>> match = matches.entrySet().iterator().next();
+                return invoke(match.getKey(), factoryObj, match.getValue().toArray());
+            } catch (Throwable e) {
+                throw wrapAsCompDefEx(e);
+            }
+        } else if (matches.size() == 0) {
+            throw new ComponentDefinitionException("Unable to find a matching factory method " + factoryMethod + " on class " + factoryObj.getClass().getName() + " for arguments " + args + " when instanciating bean " + getName());
+        } else {
+            throw new ComponentDefinitionException("Multiple matching factory methods " + factoryMethod + " found on class " + factoryObj.getClass().getName() + " for arguments " + args + " when instanciating bean " + getName() + ": " + matches.keySet());
+        }
+    }
+
+    private Object getFactoryObj() {
+        // look for instance method on factory object
+        Object factoryObj = factory.create();
+        
+        // If the factory is a service reference, we need to get hold of the actual proxy for the service
+        if (factoryObj instanceof ReferenceRecipe.ServiceProxyWrapper) {
+            try {
+                factoryObj = ((ReferenceRecipe.ServiceProxyWrapper) factoryObj).convert(new ReifiedType(Object.class));
+            } catch (Exception e) {
+                throw wrapAsCompDefEx(e);
+            }
+        } else if (factoryObj instanceof UnwrapperedBeanHolder) {
+                factoryObj = wrap((UnwrapperedBeanHolder) factoryObj, Object.class);
+        }
+        return factoryObj;
+    }
+    
+    private Object getInstanceFromStaticFactory(List<Object> args, List<ReifiedType> argTypes) {
+        // Map of matching methods
+        Map<Method, List<Object>> matches = findMatchingMethods(getType(), factoryMethod, false, args, argTypes);
+        if (matches.size() == 1) {
+            try {
+                Map.Entry<Method, List<Object>> match = matches.entrySet().iterator().next();
+                return invoke(match.getKey(), null, match.getValue().toArray());
+            } catch (Throwable e) {
+                throw wrapAsCompDefEx(e);
+            }
+        } else if (matches.size() == 0) {
+            throw new ComponentDefinitionException("Unable to find a matching factory method " + factoryMethod + " on class " + getTypeName() + " for arguments " + args + " when instanciating bean " + getName());
+        } else {
+            throw new ComponentDefinitionException("Multiple matching factory methods " + factoryMethod + " found on class " + getTypeName() + " for arguments " + args + " when instanciating bean " + getName() + ": " + matches.keySet());
+        }
+    }
+
+    private Object getInstanceFromType(List<Object> args, List<ReifiedType> argTypes) {
+        if (getType() == null) {
+            throw new ComponentDefinitionException("No factoryMethod nor class is defined for this bean");
+        }
+        // Map of matching constructors
+        Map<Constructor, List<Object>> matches = findMatchingConstructors(getType(), args, argTypes);
+        if (matches.size() == 1) {
+            try {
+                Map.Entry<Constructor, List<Object>> match = matches.entrySet().iterator().next();
+                return newInstance(match.getKey(), match.getValue().toArray());
+            } catch (Throwable e) {
+                throw wrapAsCompDefEx(e);
+            }
+        } else if (matches.size() == 0) {
+            throw new ComponentDefinitionException("Unable to find a matching constructor on class " + getTypeName() + " for arguments " + args + " when instanciating bean " + getName());
+        } else {
+            throw new ComponentDefinitionException("Multiple matching constructors found on class " + getTypeName() + " for arguments " + args + " when instanciating bean " + getName() + ": " + matches.keySet());
+        }
+    }
+
+    private ComponentDefinitionException wrapAsCompDefEx(Throwable e) {
+        return new ComponentDefinitionException("Error when instantiating bean " + getName() + " of class " + getTypeName(), getRealCause(e));
+    }
+
+    private String getTypeName() {
+        Class<?> type = getType();
+        return type == null ? null : type.getName();
     }
 
     private Map<Method, List<Object>> findMatchingMethods(Class type, String name, boolean instance, List<Object> args, List<ReifiedType> types) {
         Map<Method, List<Object>> matches = new HashMap<Method, List<Object>>();
         // Get constructors
-        List<Method> methods = new ArrayList<Method>(Arrays.asList(type.getMethods()));
+        List<Method> methods = new ArrayList<Method>(Arrays.asList(getPublicMethods(type)));
         // Discard any signature with wrong cardinality
         for (Iterator<Method> it = methods.iterator(); it.hasNext();) {
             Method mth = it.next();
@@ -311,12 +402,18 @@ public class BeanRecipe extends AbstractRecipe {
                         found = false;
                         break;
                     }
-                    if (!AggregateConverter.isAssignable(args.get(i), argType)) {
+                    //If the arg is an Unwrappered bean then we need to do the assignment check against the
+                    //unwrappered bean itself.
+                    Object arg = args.get(i);
+                    Object argToTest = arg;
+                    if(arg instanceof UnwrapperedBeanHolder)
+                    	argToTest = ((UnwrapperedBeanHolder)arg).unwrapperedBean;
+                    if (!AggregateConverter.isAssignable(argToTest, argType)) {
                         found = false;
                         break;
                     }
                     try {
-                        match.add(convert(args.get(i), mth.getGenericParameterTypes()[i]));
+                        match.add(convert(arg, mth.getGenericParameterTypes()[i]));
                     } catch (Throwable t) {
                         found = false;
                         break;
@@ -452,12 +549,18 @@ public class BeanRecipe extends AbstractRecipe {
                         found = false;
                         break;
                     }
-                    if (!AggregateConverter.isAssignable(args.get(i), argType)) {
+                    //If the arg is an Unwrappered bean then we need to do the assignment check against the
+                    //unwrappered bean itself.
+                    Object arg = args.get(i);
+                    Object argToTest = arg;
+                    if(arg instanceof UnwrapperedBeanHolder)
+                    	argToTest = ((UnwrapperedBeanHolder)arg).unwrapperedBean;
+                    if (!AggregateConverter.isAssignable(argToTest, argType)) {
                         found = false;
                         break;
                     }
                     try {
-                        match.add(convert(args.get(i), cns.getGenericParameterTypes()[i]));
+                        match.add(convert(arg, cns.getGenericParameterTypes()[i]));
                     } catch (Throwable t) {
                         found = false;
                         break;
@@ -551,7 +654,7 @@ public class BeanRecipe extends AbstractRecipe {
      */
     public Method getDestroyMethod(Object instance) throws ComponentDefinitionException {
         Method method = null;        
-        if (destroyMethod != null && destroyMethod.length() > 0) {
+        if (instance != null && destroyMethod != null && destroyMethod.length() > 0) {
             method = ReflectionUtils.getLifecycleMethod(instance.getClass(), destroyMethod);
             if (method == null) {
                 throw new ComponentDefinitionException("Component '" + getName() + "' does not have destroy-method: " + destroyMethod);
@@ -568,11 +671,11 @@ public class BeanRecipe extends AbstractRecipe {
      */
     private static class BeanCreatorChain implements BeanProcessor.BeanCreator {
         public enum ChainType{Before,After};
-        private BeanProcessor.BeanCreator parentBeanCreator;
-        private BeanProcessor parentBeanProcessor;
-        private BeanMetadata beanData;
-        private String beanName;        
-        private ChainType when;
+        private final BeanProcessor.BeanCreator parentBeanCreator;
+        private final BeanProcessor parentBeanProcessor;
+        private final BeanMetadata beanData;
+        private final String beanName;        
+        private final ChainType when;
         public BeanCreatorChain(BeanProcessor.BeanCreator parentBeanCreator, 
                                 BeanProcessor parentBeanProcessor,
                                 BeanMetadata beanData,
@@ -632,7 +735,7 @@ public class BeanRecipe extends AbstractRecipe {
             try {
                 invoke(initMethod, obj, (Object[]) null);
             } catch (Throwable t) {
-                throw new ComponentDefinitionException("Unable to intialize bean " + getName(), getRealCause(t));
+                throw new ComponentDefinitionException("Unable to initialize bean " + getName(), getRealCause(t));
             }
         }   
     }
@@ -668,50 +771,29 @@ public class BeanRecipe extends AbstractRecipe {
         return obj;
     }    
     
-    private Object addInterceptors(Object original)
+    private Object addInterceptors(final Object original, Collection<Class<?>> requiredInterfaces)
             throws ComponentDefinitionException {
 
         Object intercepted = null;
+        if(requiredInterfaces.isEmpty())
+        	requiredInterfaces.add(original.getClass());
+        
         ComponentDefinitionRegistry reg = blueprintContainer
                 .getComponentDefinitionRegistry();
         List<Interceptor> interceptors = reg.getInterceptors(interceptorLookupKey);
         if (interceptors != null && interceptors.size() > 0) {
-            boolean asmAvailable = false;
             try {
-                // Try load load an asm class (to make sure it's actually
-                // available)
-                getClass().getClassLoader().loadClass(
-                        "org.objectweb.asm.ClassVisitor");
-                LOGGER.debug("asm available for interceptors");
-                asmAvailable = true;
-            } catch (Throwable t) {
-                try {
-                    // Try load load a cglib class (to make sure it's actually
-                    // available)
-                    getClass().getClassLoader().loadClass(
-                            "net.sf.cglib.proxy.Enhancer");
-                } catch (Throwable u) {
-                    throw new ComponentDefinitionException(
-                            "Interceptors have been configured but neither asm nor cglib are available",
-                            u);
+                Bundle b = FrameworkUtil.getBundle(original.getClass());
+                if (b == null) {
+                    // we have a class from the framework parent, so use our bundle for proxying.
+                    b = blueprintContainer.getBundleContext().getBundle();
                 }
+                intercepted = blueprintContainer.getProxyManager().createInterceptingProxy(b,
+                requiredInterfaces, original, CollaboratorFactory.create(interceptorLookupKey, interceptors));
+            } catch (org.apache.aries.proxy.UnableToProxyException e) {
+                Bundle b = blueprintContainer.getBundleContext().getBundle();
+                throw new ComponentDefinitionException("Unable to create proxy for bean " + name + " in bundle " + b.getSymbolicName() + "/" + b.getVersion(), e);
             }
-            if (asmAvailable) {
-                // if asm is available we can proxy the original object with the
-                // AsmInterceptorWrapper
-                intercepted = AsmInterceptorWrapper.createProxyObject(original
-                        .getClass().getClassLoader(), interceptorLookupKey, interceptors,
-                        original, original.getClass());
-            } else {
-                LOGGER.debug("cglib available for interceptors");
-                // otherwise we're using cglib and need to use the interfaces
-                // with the CgLibInterceptorWrapper
-                intercepted = CgLibInterceptorWrapper.createProxyObject(
-                        original.getClass().getClassLoader(), interceptorLookupKey,
-                        interceptors, original, original.getClass()
-                                .getInterfaces());
-            }
-
         } else {
             intercepted = original;
         }
@@ -720,6 +802,28 @@ public class BeanRecipe extends AbstractRecipe {
         
     @Override
     protected Object internalCreate() throws ComponentDefinitionException {
+        if (factory instanceof ReferenceRecipe) {
+            ReferenceRecipe rr = (ReferenceRecipe) factory;
+            if (rr.getProxyChildBeanClasses() != null) {
+                return createProxyBean(rr);
+            }
+        } 
+        return new UnwrapperedBeanHolder(internalCreate2(), this);
+    }
+    
+    private Object createProxyBean(ReferenceRecipe rr) {
+        try {
+            VoidableCallable vc = new VoidableCallable();
+            rr.addVoidableChild(vc);
+            return blueprintContainer.getProxyManager().createDelegatingProxy(
+                blueprintContainer.getBundleContext().getBundle(), rr.getProxyChildBeanClasses(),
+                vc, vc.call());
+        } catch (UnableToProxyException e) {
+            throw new ComponentDefinitionException(e);
+        }
+    }
+    
+    private Object internalCreate2() throws ComponentDefinitionException {
         
         instantiateExplicitDependencies();
 
@@ -745,13 +849,35 @@ public class BeanRecipe extends AbstractRecipe {
         
         obj = runBeanProcPostInit(obj);
         
-        obj = addInterceptors(obj);
+        //Replaced by calling wrap on the UnwrapperedBeanHolder
+//        obj = addInterceptors(obj);
         
         return obj;
     }
     
+    static Object wrap(UnwrapperedBeanHolder holder, Collection<Class<?>> requiredViews) {
+        return holder.recipe.addInterceptors(holder.unwrapperedBean, requiredViews);
+    }
+    
+    static Object wrap(UnwrapperedBeanHolder holder, Class<?> requiredView) {
+        if(requiredView == Object.class) {
+          //We don't know what we need so we have to do everything
+            return holder.recipe.addInterceptors(holder.unwrapperedBean, new ArrayList<Class<?>>(1));
+        } else {
+        	return holder.recipe.addInterceptors(holder.unwrapperedBean, ProxyUtils.asList(requiredView));
+        }
+    }
+    
+    
     @Override
     public void destroy(Object obj) {
+        if (!(obj instanceof UnwrapperedBeanHolder)) {
+            LOGGER.warn("Object to be destroyed is not an instance of UnwrapperedBeanHolder, type: " + obj);
+            return;
+        }
+    
+        obj = ((UnwrapperedBeanHolder)obj).unwrapperedBean;
+    
         for (BeanProcessor processor : blueprintContainer.getProcessors(BeanProcessor.class)) {
             processor.beforeDestroy(obj, getName());
         }
@@ -760,8 +886,18 @@ public class BeanRecipe extends AbstractRecipe {
             if (method != null) {
                 invoke(method, obj, (Object[]) null);
             }
+        } catch (ComponentDefinitionException e) {
+            // This exception occurs if the destroy method does not exist, so we just output the exception message.
+            LOGGER.error(e.getMessage());
+        } catch (InvocationTargetException ite) {
+          Throwable t = ite.getTargetException();
+          BundleContext ctx = blueprintContainer.getBundleContext();
+          Bundle b = ctx.getBundle();
+          LOGGER.error("The blueprint bean {} in bundle {}/{} incorrectly threw an exception from its destroy method.", getName(), b.getSymbolicName(), b.getVersion(), t);
         } catch (Exception e) {
-            LOGGER.info("Error invoking destroy method", getRealCause(e));
+            BundleContext ctx = blueprintContainer.getBundleContext();
+            Bundle b = ctx.getBundle();
+            LOGGER.error("An exception occurred while calling the destroy method of the blueprint bean  in bundle {}/{}.", getName(), b.getSymbolicName(), b.getVersion(), getRealCause(e));
         }
         for (BeanProcessor processor : blueprintContainer.getProcessors(BeanProcessor.class)) {
             processor.afterDestroy(obj, getName());
@@ -801,7 +937,7 @@ public class BeanRecipe extends AbstractRecipe {
             PropertyDescriptor pd = getPropertyDescriptor(clazz, names[i]);
             if (pd.allowsGet()) {
                 try {
-                    instance = pd.get(instance, blueprintContainer.getAccessControlContext());
+                    instance = pd.get(instance, blueprintContainer);
                 } catch (Exception e) {
                     throw new ComponentDefinitionException("Error getting property: " + names[i] + " on bean " + getName() + " when setting property " + propertyName + " on class " + clazz.getName(), getRealCause(e));
                 }
@@ -822,7 +958,7 @@ public class BeanRecipe extends AbstractRecipe {
         final PropertyDescriptor pd = getPropertyDescriptor(clazz, names[names.length - 1]);
         if (pd.allowsSet()) {
             try {
-                pd.set(instance, propertyValue, blueprintContainer.getAccessControlContext());
+                pd.set(instance, propertyValue, blueprintContainer);
             } catch (Exception e) {
                 throw new ComponentDefinitionException("Error setting property: " + pd, getRealCause(e));
             }
@@ -852,8 +988,8 @@ public class BeanRecipe extends AbstractRecipe {
 
     private class ArgumentMatcher {
 
-        private List<TypeEntry> entries;
-        private boolean convert;
+        private final List<TypeEntry> entries;
+        private final boolean convert;
 
         public ArgumentMatcher(Type[] types, boolean convert) {
             entries = new ArrayList<TypeEntry>();
@@ -905,15 +1041,26 @@ public class BeanRecipe extends AbstractRecipe {
                     }
                 } else if (arg != null) {
                     if (convert) {
-                        try {
-                            // TODO: call canConvert instead of convert()
-                            val = convert(arg, entry.type);
-                        } catch (Throwable t) {
+                        
+                        if(canConvert(arg, entry.type)) {
+                            try {
+								val = convert(arg, entry.type);
+							} catch (Exception e) {
+								throw new ComponentDefinitionException(e);
+							}
+                        } else { 
                             continue;
                         }
                     } else {
+                    	UnwrapperedBeanHolder holder = null;
+                        if(arg instanceof UnwrapperedBeanHolder) {
+                        	holder = (UnwrapperedBeanHolder)arg;
+                        	arg = holder.unwrapperedBean;
+                        }
                         if (!AggregateConverter.isAssignable(arg, entry.type)) {
                             continue;
+                        } else if (holder != null) {
+                            val = wrap(holder, entry.type.getRawClass());
                         }
                     }
                 }

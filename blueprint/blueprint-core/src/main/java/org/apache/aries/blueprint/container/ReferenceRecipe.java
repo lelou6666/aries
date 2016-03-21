@@ -18,21 +18,24 @@
  */
 package org.apache.aries.blueprint.container;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
-import org.apache.aries.blueprint.ExtendedBlueprintContainer;
-import org.apache.aries.blueprint.ExtendedServiceReferenceMetadata;
-import org.apache.aries.blueprint.di.Recipe;
+import org.apache.aries.blueprint.ExtendedReferenceMetadata;
 import org.apache.aries.blueprint.di.CollectionRecipe;
+import org.apache.aries.blueprint.di.Recipe;
+import org.apache.aries.blueprint.di.ValueRecipe;
+import org.apache.aries.blueprint.services.ExtendedBlueprintContainer;
 import org.osgi.framework.ServiceReference;
 import org.osgi.service.blueprint.container.BlueprintEvent;
-import org.osgi.service.blueprint.container.ReifiedType;
 import org.osgi.service.blueprint.container.ComponentDefinitionException;
+import org.osgi.service.blueprint.container.ReifiedType;
 import org.osgi.service.blueprint.container.ServiceUnavailableException;
 import org.osgi.service.blueprint.reflect.ReferenceMetadata;
 import org.osgi.service.blueprint.reflect.ServiceReferenceMetadata;
@@ -49,6 +52,7 @@ import org.slf4j.LoggerFactory;
  *
  * @version $Rev$, $Date$
  */
+@SuppressWarnings("rawtypes")
 public class ReferenceRecipe extends AbstractServiceReferenceRecipe {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReferenceRecipe.class);
@@ -56,17 +60,31 @@ public class ReferenceRecipe extends AbstractServiceReferenceRecipe {
     private final ReferenceMetadata metadata;
     private Object proxy;
 
+    private final Object monitor = new Object();
     private volatile ServiceReference trackedServiceReference;
     private volatile Object trackedService;
-    private final Object monitor = new Object();
+    private Object defaultBean;
 
+    private final Collection<Class<?>> proxyChildBeanClasses;
+    private final Collection<WeakReference<Voidable>> proxiedChildren;
+    
     public ReferenceRecipe(String name,
                            ExtendedBlueprintContainer blueprintContainer,
                            ReferenceMetadata metadata,
+                           ValueRecipe filterRecipe,
                            CollectionRecipe listenersRecipe,
                            List<Recipe> explicitDependencies) {
-        super(name, blueprintContainer, metadata, listenersRecipe, explicitDependencies);
+        super(name, blueprintContainer, metadata, filterRecipe, listenersRecipe, explicitDependencies);
         this.metadata = metadata;
+        if(metadata instanceof ExtendedReferenceMetadata) 
+            proxyChildBeanClasses = ((ExtendedReferenceMetadata) metadata).getProxyChildBeanClasses();
+        else 
+            proxyChildBeanClasses = null;
+        
+        if (proxyChildBeanClasses != null)
+            proxiedChildren = new ArrayList<WeakReference<Voidable>>();
+        else
+            proxiedChildren = null;
     }
 
     @Override
@@ -78,12 +96,12 @@ public class ReferenceRecipe extends AbstractServiceReferenceRecipe {
                 }
             }
             // Create the proxy
-            Set<Class> interfaces = new HashSet<Class>();
-            if (this.metadata.getInterface() != null) {
-                interfaces.add(loadClass(this.metadata.getInterface()));
-            }
-            if (this.metadata instanceof ExtendedServiceReferenceMetadata && ((ExtendedServiceReferenceMetadata) this.metadata).getRuntimeInterface() != null) {
-                interfaces.add(((ExtendedServiceReferenceMetadata) this.metadata).getRuntimeInterface());
+            Set<Class<?>> interfaces = new HashSet<Class<?>>();
+            Class<?> clz = getInterfaceClass();
+            if (clz != null) interfaces.add(clz);
+            
+            if (metadata instanceof ExtendedReferenceMetadata) {
+                interfaces.addAll(loadAllClasses(((ExtendedReferenceMetadata)metadata).getExtraInterfaces()));
             }
 
             proxy = createProxy(new ServiceDispatcher(), interfaces);
@@ -145,13 +163,21 @@ public class ReferenceRecipe extends AbstractServiceReferenceRecipe {
     private void bind(ServiceReference ref) {
         LOGGER.debug("Binding reference {} to {}", getName(), ref);
         synchronized (monitor) {
-            if (trackedServiceReference != null) {
-                blueprintContainer.getBundleContext().ungetService(trackedServiceReference);
-            }
+            ServiceReference oldReference = trackedServiceReference;
             trackedServiceReference = ref;
-            trackedService = null;
-            monitor.notifyAll();
+            voidProxiedChildren();
             bind(trackedServiceReference, proxy);
+            if (ref != oldReference) {
+              if (oldReference != null && trackedService != null) {
+                try {
+                  blueprintContainer.getBundleContext().ungetService(oldReference);
+                } catch (IllegalStateException ise) {
+                  // In case the service no longer exists lets just cope and ignore.
+                }
+              }
+              trackedService = null;
+            }
+            monitor.notifyAll();
         }
     }
 
@@ -160,9 +186,17 @@ public class ReferenceRecipe extends AbstractServiceReferenceRecipe {
         synchronized (monitor) {
             if (trackedServiceReference != null) {
                 unbind(trackedServiceReference, proxy);
-                blueprintContainer.getBundleContext().ungetService(trackedServiceReference);
+                ServiceReference oldReference = trackedServiceReference;
                 trackedServiceReference = null;
-                trackedService = null;
+                voidProxiedChildren();
+                if(trackedService != null){
+                  try {
+                    getBundleContextForServiceLookup().ungetService(oldReference);
+                  } catch (IllegalStateException ise) {
+                    // In case the service no longer exists lets just cope and ignore.
+                  }
+                  trackedService = null;
+                }
                 monitor.notifyAll();
             }
         }
@@ -172,25 +206,61 @@ public class ReferenceRecipe extends AbstractServiceReferenceRecipe {
         synchronized (monitor) {
             if (isStarted() && trackedServiceReference == null && metadata.getTimeout() > 0
                     && metadata.getAvailability() == ServiceReferenceMetadata.AVAILABILITY_MANDATORY) {
-                blueprintContainer.getEventDispatcher().blueprintEvent(new BlueprintEvent(BlueprintEvent.WAITING, blueprintContainer.getBundleContext().getBundle(), blueprintContainer.getExtenderBundle(), new String[] { getOsgiFilter() }));
+                //Here we want to get the blueprint bundle itself, so don't use #getBundleContextForServiceLookup()
+                blueprintContainer.getEventDispatcher().blueprintEvent(createWaitingevent());
                 monitor.wait(metadata.getTimeout());
             }
+            Object result = null;
             if (trackedServiceReference == null) {
                 if (isStarted()) {
-                    LOGGER.info("Timeout expired when waiting for OSGi service {}", getOsgiFilter());
-                    throw new ServiceUnavailableException("Timeout expired when waiting for OSGi service", getOsgiFilter());
+                  boolean failed = true;
+                  if (metadata.getAvailability() == ReferenceMetadata.AVAILABILITY_OPTIONAL && 
+                      metadata instanceof ExtendedReferenceMetadata) {
+                     if (defaultBean == null) {
+                         String defaultBeanId = ((ExtendedReferenceMetadata)metadata).getDefaultBean();
+                         if (defaultBeanId != null) {
+                           defaultBean = blueprintContainer.getComponentInstance(defaultBeanId);
+                           failed = false;
+                         }
+                     } else {
+                         failed = false;
+                     }
+                     result = defaultBean;
+                  } 
+                  
+                  if (failed) {
+                    if (metadata.getAvailability() == ServiceReferenceMetadata.AVAILABILITY_MANDATORY) {
+                        LOGGER.info("Timeout expired when waiting for mandatory OSGi service reference {}", getOsgiFilter());
+                        throw new ServiceUnavailableException("Timeout expired when waiting for mandatory OSGi service reference: " + getOsgiFilter(), getOsgiFilter());
+                    } else {
+                        LOGGER.info("No matching service for optional OSGi service reference {}", getOsgiFilter());
+                        throw new ServiceUnavailableException("No matching service for optional OSGi service reference: " + getOsgiFilter(), getOsgiFilter());
+                    }
+                  }
                 } else {
-                    throw new ServiceUnavailableException("The Blueprint container is being or has been destroyed", getOsgiFilter());
+                    throw new ServiceUnavailableException("The Blueprint container is being or has been destroyed: " + getOsgiFilter(), getOsgiFilter());
                 }
+            } else {
+            
+              if (trackedService == null) {
+            	  trackedService = getServiceSecurely(trackedServiceReference);
+              }
+              
+              if (trackedService == null) {
+                  throw new IllegalStateException("getService() returned null for " + trackedServiceReference);
+              }
+              
+              result = trackedService;
             }
-            if (trackedService == null) {
-                trackedService = blueprintContainer.getService(trackedServiceReference);
-            }
-            if (trackedService == null) {
-                throw new IllegalStateException("getService() returned null for " + trackedServiceReference);
-            }
-            return trackedService;
+            return result;
         }
+    }
+
+    private BlueprintEvent createWaitingevent() {
+        return new BlueprintEvent(BlueprintEvent.WAITING, 
+                                  blueprintContainer.getBundleContext().getBundle(), 
+                                  blueprintContainer.getExtenderBundle(), 
+                                  new String[] { getOsgiFilter() });
     }
 
     private ServiceReference getServiceReference() throws InterruptedException {
@@ -200,6 +270,34 @@ public class ReferenceRecipe extends AbstractServiceReferenceRecipe {
             }
             return trackedServiceReference;
         }
+    }
+    
+    private void voidProxiedChildren() {
+        if(proxyChildBeanClasses != null) {
+            synchronized(proxiedChildren) {
+                for(Iterator<WeakReference<Voidable>> it = proxiedChildren.iterator(); it.hasNext();) {
+                    Voidable v = it.next().get();
+                    if(v == null)
+                        it.remove();
+                    else
+                      v.voidReference();
+                }
+            }
+        }
+    }
+    
+    public void addVoidableChild(Voidable v) {
+        if(proxyChildBeanClasses != null) {
+            synchronized (proxiedChildren) {
+                proxiedChildren.add(new WeakReference<Voidable>(v));
+            }
+        } else {
+            throw new IllegalStateException("Proxying of child beans is disabled for this recipe");
+        }
+    }
+    
+    public Collection<Class<?>> getProxyChildBeanClasses() {
+        return proxyChildBeanClasses;
     }
 
     public class ServiceDispatcher implements Callable<Object> {

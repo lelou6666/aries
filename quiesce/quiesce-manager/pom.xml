@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+<?xml version="1.0" encoding="UTF-8"?>
+>>>>>>> refs/remotes/apache/trunk
 <!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -17,6 +21,7 @@
  under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<<<<<<< HEAD
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.aries.quiesce</groupId>
@@ -34,6 +39,35 @@
     <properties>
         <aries.osgi.export.pkg>
         </aries.osgi.export.pkg>
+=======
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.apache.aries</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+        <relativePath>../../parent/pom.xml</relativePath>
+    </parent>
+
+    <groupId>org.apache.aries.quiesce</groupId>
+    <artifactId>org.apache.aries.quiesce.manager</artifactId>
+    <packaging>bundle</packaging>
+    <version>1.0.1-SNAPSHOT</version>
+    <name>Apache Aries Quiesce Manager</name>
+    <description>
+        Quiesce Manager.
+    </description>
+
+    <scm>
+        <connection>scm:svn:http://svn.apache.org/repos/asf/aries/trunk/quiesce/quiesce-manager</connection>
+        <developerConnection>scm:svn:https://svn.apache.org/repos/asf/aries/trunk/quiesce/quiesce-manager</developerConnection>
+        <url>http://svn.apache.org/viewvc/aries/trunk/quiesce/quiesce-manager</url>
+    </scm>
+
+    <properties>
+        <aries.osgi.export.pkg/>
+>>>>>>> refs/remotes/apache/trunk
         <aries.osgi.private.pkg>
             org.apache.aries.quiesce.manager.impl
         </aries.osgi.private.pkg>
@@ -43,6 +77,10 @@
         <aries.osgi.export.service>
             org.apache.aries.quiesce.manager.QuiesceManager
         </aries.osgi.export.service>
+<<<<<<< HEAD
+=======
+        <lastReleaseVersion>1.0.0</lastReleaseVersion>
+>>>>>>> refs/remotes/apache/trunk
     </properties>
 
     <dependencies>
@@ -54,6 +92,7 @@
         <dependency>
             <groupId>org.apache.aries.quiesce</groupId>
             <artifactId>org.apache.aries.quiesce.api</artifactId>
+<<<<<<< HEAD
             <scope>provided</scope>
 		<version>${version}</version>
         </dependency>
@@ -65,6 +104,18 @@
         <dependency>
             <groupId>org.osgi</groupId>
             <artifactId>org.osgi.compendium</artifactId>
+=======
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.aries</groupId>
+            <artifactId>org.apache.aries.util</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.osgi</groupId>
+            <artifactId>org.osgi.core</artifactId>
+>>>>>>> refs/remotes/apache/trunk
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -78,6 +129,27 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+<<<<<<< HEAD
         
+=======
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.aries.versioning</groupId>
+                <artifactId>org.apache.aries.versioning.plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-verify</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>version-check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+>>>>>>> refs/remotes/apache/trunk
 
 </project>

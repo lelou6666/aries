@@ -18,7 +18,9 @@
  */
 package org.apache.aries.jndi;
 
+import java.util.HashMap;
 import java.util.Hashtable;
+import java.util.Map;
 
 import javax.naming.Binding;
 import javax.naming.Context;
@@ -32,17 +34,22 @@ import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.ModificationItem;
 import javax.naming.directory.SearchControls;
+import javax.naming.directory.SearchResult;
+import javax.naming.ldap.Control;
+import javax.naming.ldap.ExtendedRequest;
+import javax.naming.ldap.ExtendedResponse;
+import javax.naming.ldap.LdapContext;
 
-import org.apache.aries.jndi.ContextHelper.ContextProvider;
 import org.osgi.framework.BundleContext;
 
-public class DelegateContext implements DirContext {
+public class DelegateContext implements DirContext, LdapContext {
     
-    private Hashtable<Object, Object> env = new Hashtable<Object, Object>();
+    private final Hashtable<Object, Object> env = new Hashtable<Object, Object>();
 
-    private BundleContext bundleContext;
+    private final BundleContext bundleContext;
     private ContextProvider contextProvider;
-    private boolean rebind;
+    private final Map<String, ContextProvider> urlContexts = new HashMap<String, ContextProvider>();
+    private final boolean rebind;
 
     public DelegateContext(BundleContext bundleContext, Hashtable<?, ?> theEnv) {
         this.bundleContext = bundleContext;
@@ -53,7 +60,7 @@ public class DelegateContext implements DirContext {
     public DelegateContext(BundleContext bundleContext, ContextProvider contextProvider) throws NamingException {
         this.bundleContext = bundleContext;
         this.contextProvider = contextProvider;
-        env.putAll(contextProvider.context.getEnvironment());
+        env.putAll(contextProvider.getContext().getEnvironment());
         rebind = true;
     }
 
@@ -77,8 +84,14 @@ public class DelegateContext implements DirContext {
 
     public void close() throws NamingException {
         if (contextProvider != null) {
-            contextProvider.context.close();
+            contextProvider.close();
         }
+        
+        for (ContextProvider provider : urlContexts.values()) {
+          provider.close();
+        }
+        
+        urlContexts.clear();
         env.clear();
     }
 
@@ -203,14 +216,6 @@ public class DelegateContext implements DirContext {
             toReturn = getDefaultContext();
         }
 
-        if (toReturn != null) {
-            String packages = Utils.getSystemProperty(Context.URL_PKG_PREFIXES, null);
-
-            if (packages != null) {
-                toReturn.addToEnvironment(Context.URL_PKG_PREFIXES, packages);
-            }
-        }
-
         return toReturn;
     }
 
@@ -222,7 +227,7 @@ public class DelegateContext implements DirContext {
             if (contextProvider == null) {
                 throw new NoInitialContextException();
             } else {
-                return contextProvider.context;
+                return contextProvider.getContext();
             }
         } else {
             throw new NoInitialContextException();
@@ -237,7 +242,14 @@ public class DelegateContext implements DirContext {
         if (index != -1) {
             String scheme = name.substring(0, index);
 
-            ctx = ContextHelper.createURLContext(bundleContext, scheme, env);
+            ContextProvider provider = urlContexts.get(scheme);
+            
+            if (provider == null || !!!provider.isValid()) {
+              provider = ContextHelper.createURLContext(bundleContext, scheme, env);
+              if (provider != null) urlContexts.put(scheme, provider);
+            }
+            
+            if (provider != null) ctx = provider.getContext();
         }
 
         if (ctx == null) {
@@ -319,51 +331,82 @@ public class DelegateContext implements DirContext {
         return ((DirContext) findContext(name)).getSchemaClassDefinition(name);
     }
 
-    public NamingEnumeration search(Name name,
+    public NamingEnumeration<SearchResult> search(Name name,
                                     Attributes matchingAttributes,
                                     String[] attributesToReturn) throws NamingException {
         return ((DirContext) findContext(name))
                 .search(name, matchingAttributes, attributesToReturn);
     }
 
-    public NamingEnumeration search(String name,
+    public NamingEnumeration<SearchResult> search(String name,
                                     Attributes matchingAttributes,
                                     String[] attributesToReturn) throws NamingException {
         return ((DirContext) findContext(name))
                 .search(name, matchingAttributes, attributesToReturn);
     }
 
-    public NamingEnumeration search(Name name, Attributes matchingAttributes)
+    public NamingEnumeration<SearchResult> search(Name name, Attributes matchingAttributes)
             throws NamingException {
         return ((DirContext) findContext(name)).search(name, matchingAttributes);
     }
 
-    public NamingEnumeration search(String name, Attributes matchingAttributes)
+    public NamingEnumeration<SearchResult> search(String name, Attributes matchingAttributes)
             throws NamingException {
         return ((DirContext) findContext(name)).search(name, matchingAttributes);
     }
 
-    public NamingEnumeration search(Name name, String filter, SearchControls cons)
+    public NamingEnumeration<SearchResult> search(Name name, String filter, SearchControls cons)
             throws NamingException {
         return ((DirContext) findContext(name)).search(name, filter, cons);
     }
 
-    public NamingEnumeration search(String name, String filter, SearchControls cons)
+    public NamingEnumeration<SearchResult> search(String name, String filter, SearchControls cons)
             throws NamingException {
         return ((DirContext) findContext(name)).search(name, filter, cons);
     }
 
-    public NamingEnumeration search(Name name,
+    public NamingEnumeration<SearchResult> search(Name name,
                                     String filterExpr,
                                     Object[] filterArgs,
                                     SearchControls cons) throws NamingException {
         return ((DirContext) findContext(name)).search(name, filterExpr, filterArgs, cons);
     }
 
-    public NamingEnumeration search(String name,
+    public NamingEnumeration<SearchResult> search(String name,
                                     String filterExpr,
                                     Object[] filterArgs,
                                     SearchControls cons) throws NamingException {
         return ((DirContext) findContext(name)).search(name, filterExpr, filterArgs, cons);
+    }
+
+    public ExtendedResponse extendedOperation(ExtendedRequest request)
+        throws NamingException {
+      return ((LdapContext) getDefaultContext()).extendedOperation(request);
+    }
+
+    public Control[] getConnectControls() throws NamingException {
+      return ((LdapContext) getDefaultContext()).getConnectControls();
+    }
+
+    public Control[] getRequestControls() throws NamingException {
+      return ((LdapContext) getDefaultContext()).getRequestControls();
+    }
+
+    public Control[] getResponseControls() throws NamingException {
+      return ((LdapContext) getDefaultContext()).getResponseControls();
+    }
+
+    public LdapContext newInstance(Control[] requestControls)
+        throws NamingException {
+      return ((LdapContext) getDefaultContext()).newInstance(requestControls);
+    }
+
+    public void reconnect(Control[] connCtls) throws NamingException {
+      ((LdapContext) getDefaultContext()).reconnect(connCtls);
+    }
+
+    public void setRequestControls(Control[] requestControls)
+        throws NamingException {
+      ((LdapContext) getDefaultContext()).setRequestControls(requestControls);
     }
 }

@@ -24,11 +24,15 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.Properties;
+import java.util.concurrent.Callable;
 
 import javax.naming.Binding;
 import javax.naming.Context;
@@ -40,11 +44,12 @@ import javax.naming.NamingException;
 import javax.naming.spi.ObjectFactory;
 import javax.sql.DataSource;
 
-import org.apache.aries.jndi.ContextHelper;
-import org.apache.aries.jndi.OSGiObjectFactoryBuilder;
+import org.apache.aries.jndi.api.JNDIConstants;
 import org.apache.aries.mocks.BundleContextMock;
 import org.apache.aries.mocks.BundleMock;
+import org.apache.aries.proxy.ProxyManager;
 import org.apache.aries.unittest.mocks.MethodCall;
+import org.apache.aries.unittest.mocks.MethodCallHandler;
 import org.apache.aries.unittest.mocks.Skeleton;
 import org.junit.After;
 import org.junit.Before;
@@ -56,7 +61,6 @@ import org.osgi.framework.ServiceException;
 import org.osgi.framework.ServiceFactory;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
-import org.osgi.service.jndi.JNDIConstants;
 
 /**
  * Tests for our JNDI implementation for the service registry.
@@ -82,6 +86,7 @@ public class ServiceRegistryContextTest
   public void registerService() throws NamingException, SecurityException, NoSuchFieldException, IllegalArgumentException, IllegalAccessException 
   {
     bc =  Skeleton.newMock(new BundleContextMock(), BundleContext.class);
+    registerProxyManager();
     new org.apache.aries.jndi.startup.Activator().start(bc);
     new Activator().start(bc);
         
@@ -90,6 +95,43 @@ public class ServiceRegistryContextTest
     registerService(service);
   }
   
+  private void registerProxyManager() 
+  {
+    ProxyManager mgr = Skeleton.newMock(ProxyManager.class);
+    
+    //   public Object createDelegatingProxy(Bundle clientBundle, Collection<Class<?>> classes, Callable<Object> dispatcher, Object template) throws UnableToProxyException;
+
+    Skeleton.getSkeleton(mgr).registerMethodCallHandler(new MethodCall(ProxyManager.class, "createDelegatingProxy", Bundle.class, Collection.class, Callable.class, Object.class),
+        new MethodCallHandler() 
+        {
+          public Object handle(MethodCall methodCall, Skeleton skeleton) throws Exception 
+          {
+            @SuppressWarnings("unchecked")
+            Collection<Class<?>> interfaceClasses = (Collection<Class<?>>) methodCall.getArguments()[1];
+            Class<?>[] classes = new Class<?>[interfaceClasses.size()];
+            
+            Iterator<Class<?>> it = interfaceClasses.iterator(); 
+            for (int i = 0; it.hasNext(); i++) {
+              classes[i] = it.next();
+            }
+            
+            @SuppressWarnings("unchecked")
+            final Callable<Object> target = (Callable<Object>) methodCall.getArguments()[2];
+            
+            return Proxy.newProxyInstance(this.getClass().getClassLoader(), classes, new InvocationHandler() 
+            {
+              public Object invoke(Object mock, Method method, Object[] arguments)
+                  throws Throwable 
+              {
+                return method.invoke(target.call(), arguments);
+              }
+            });
+          }
+        });
+    
+    bc.registerService(ProxyManager.class.getName(), mgr, null);
+  }
+
   /**
    * Register a service in our map.
    * 
@@ -137,6 +179,37 @@ public class ServiceRegistryContextTest
      Runnable r2 = (Runnable) ctx.lookup("aries:services/java.lang.Runnable");
      assertNotNull(r2);
      assertTrue("expected non-proxied service class", r2 == service);
+  }
+  
+  @Test
+  public void testLookupWithPause() throws NamingException
+  {
+     BundleMock mock = new BundleMock("scooby.doo", new Properties());
+        
+     Thread.currentThread().setContextClassLoader(mock.getClassLoader());
+
+     Hashtable<Object, Object> env = new Hashtable<Object, Object>();
+     env.put(JNDIConstants.REBIND_TIMEOUT, 1000);
+     
+     InitialContext ctx = new InitialContext(env);
+     
+     Context ctx2 = (Context) ctx.lookup("osgi:service");
+     
+     Runnable r1 = (Runnable) ctx2.lookup("java.lang.Runnable");   
+     
+     reg.unregister();
+     
+     long startTime = System.currentTimeMillis();
+     
+     try {
+       r1.run();
+       fail("Should have received an exception");
+     } catch (ServiceException e) {
+       long endTime = System.currentTimeMillis();
+       long diff = endTime - startTime;
+       
+       assertTrue("The run method did not fail in the expected time (1s): " + diff, diff >= 1000);
+     }
   }
   
   /**

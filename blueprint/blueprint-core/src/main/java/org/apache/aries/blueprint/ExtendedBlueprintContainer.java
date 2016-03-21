@@ -16,47 +16,11 @@
  */
 package org.apache.aries.blueprint;
 
-import java.security.AccessControlContext;
-import java.util.Dictionary;
-import java.util.List;
-
-import org.apache.aries.blueprint.container.ServiceRecipe;
-import org.apache.aries.blueprint.di.Repository;
-import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.ServiceReference;
-import org.osgi.framework.ServiceRegistration;
-import org.osgi.service.blueprint.container.BlueprintContainer;
-import org.osgi.service.blueprint.container.BlueprintListener;
-import org.osgi.service.blueprint.container.Converter;
-
 /**
- * TODO: javadoc
- *
- * @version $Rev$, $Date$
+ * @deprecated - use org.apache.aries.blueprint.services.ExtendedBlueprintContainer
+ *               Will be removed in a future version of Aries Blueprint
  */
-public interface ExtendedBlueprintContainer extends BlueprintContainer {
+@Deprecated
+public interface ExtendedBlueprintContainer extends org.apache.aries.blueprint.services.ExtendedBlueprintContainer {
 
-    BundleContext getBundleContext();
-
-    Bundle getExtenderBundle();
-
-    BlueprintListener getEventDispatcher();
-
-    Converter getConverter();
-
-    Class loadClass(String name) throws ClassNotFoundException;
-
-    ComponentDefinitionRegistry getComponentDefinitionRegistry();
-
-    <T extends Processor> List<T> getProcessors(Class<T> type);
-
-    Repository getRepository();
-    
-    ServiceRegistration registerService(String[] classes, Object service, Dictionary properties);
-    
-    Object getService(ServiceReference reference);
-    
-    AccessControlContext getAccessControlContext();
-            
 }

@@ -25,7 +25,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.TreeSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -39,7 +39,6 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 
 import org.apache.aries.web.converter.WabConversion;
-import org.apache.aries.web.converter.WarToWabConverter;
 import org.apache.aries.web.converter.WarToWabConverter.InputStreamProvider;
 import org.objectweb.asm.ClassReader;
 import org.osgi.framework.Constants;
@@ -85,8 +84,8 @@ public class WarToWabConverterImpl implements WabConversion {
   public WarToWabConverterImpl(InputStreamProvider warFile, String name, CaseInsensitiveMap properties) throws IOException {
     this.properties = properties;
     classPath = new ArrayList<String>();
-    importPackages = new HashSet<String>();
-    exemptPackages = new HashSet<String>();
+    importPackages = new TreeSet<String>();
+    exemptPackages = new TreeSet<String>();
     input = warFile;
     this.warName = name;
   }
@@ -340,6 +339,7 @@ public class WarToWabConverterImpl implements WabConversion {
       properties.put(Constants.BUNDLE_CLASSPATH, classPathValue.toString().substring(1));
     }
 
+    @SuppressWarnings("serial")
     ArrayList<String> packages = new ArrayList<String>() {
       @Override
       public boolean contains(Object elem) {

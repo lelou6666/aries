@@ -22,28 +22,18 @@
             xsi:schemaLocation="http://www.osgi.org/xmlns/blueprint/v1.0.0" 
             default-activation="lazy">
             
-  <service interface="org.apache.aries.blueprint.NamespaceHandler">
-        <service-properties>
-            <entry key="osgi.service.blueprint.namespace">
-            	<list>
-				    <value>http://aries.apache.org/xmlns/transactions/v1.0.0</value>
-				    <value>http://aries.apache.org/xmlns/transactions/v1.1.0</value>
-			    </list>
-			</entry>
-        </service-properties>
-        <bean class="org.apache.aries.transaction.parsing.TxElementHandler">
-            <property ref="txenhancer" name="txMetaDataHelper"/>
-            <property ref="txinterceptor" name="transactionInterceptor"/>
-        </bean>
-  </service>              
-  
-  <bean id="txenhancer" class="org.apache.aries.transaction.TxComponentMetaDataHelperImpl"/>
-  
-  <bean id="txinterceptor" class="org.apache.aries.transaction.TxInterceptorImpl">
-    <property name="transactionManager" ref="tm"/>
-    <property ref="txenhancer" name="txMetaDataHelper"/>
+  <service interface="org.apache.aries.blueprint.NamespaceHandler" ref="nsHandler">
+    <service-properties>
+      <entry key="osgi.service.blueprint.namespace" value="http://aries.apache.org/xmlns/transactions/v2.0.0"/>
+    </service-properties>
+  </service>
+
+  <bean id="nsHandler" class="org.apache.aries.transaction.parsing.TxNamespaceHandler">
+    <property name="tm" ref="tm" />
+    <property name="coordinator" ref="coordinator" />
   </bean>
   
   <reference id="tm" interface="javax.transaction.TransactionManager"/>
+  <reference id="coordinator" interface="org.osgi.service.coordinator.Coordinator"/>
 
 </blueprint>

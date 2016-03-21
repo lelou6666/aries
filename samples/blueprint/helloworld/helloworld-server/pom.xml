@@ -20,11 +20,20 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
+<<<<<<< HEAD
         <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
         <artifactId>helloworld</artifactId>
         <version>0.3-incubating-SNAPSHOT</version>
     </parent>
 
+=======
+        <groupId>org.apache.aries.samples</groupId>
+        <artifactId>helloworld</artifactId>
+        <version>1.0.1-SNAPSHOT</version>
+    </parent>
+
+    <groupId>org.apache.aries.samples.blueprint.helloworld</groupId>
+>>>>>>> refs/remotes/apache/trunk
     <artifactId>org.apache.aries.samples.blueprint.helloworld.server</artifactId>
     <name>Apache Aries Blueprint HelloWorldServer</name>
     <packaging>bundle</packaging>
@@ -38,7 +47,15 @@
                 </artifactId>
                 <configuration>
                     <instructions>
+<<<<<<< HEAD
                         <Bundle-SymbolicName>${pom.artifactId}</Bundle-SymbolicName>
+=======
+                        <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+                        <Import-Package>
+                           org.apache.aries.samples.blueprint.helloworld.api;provide:=true,
+                           *
+                        </Import-Package>
+>>>>>>> refs/remotes/apache/trunk
                     </instructions>
                 </configuration>
             </plugin>

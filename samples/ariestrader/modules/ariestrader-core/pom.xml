@@ -21,7 +21,11 @@
     <parent>
         <groupId>org.apache.aries.samples.ariestrader</groupId>
         <artifactId>modules</artifactId>
+<<<<<<< HEAD
         <version>0.3-incubating-SNAPSHOT</version>
+=======
+        <version>1.0.1-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/trunk
     </parent>
 
     <groupId>org.apache.aries.samples.ariestrader</groupId>
@@ -50,10 +54,16 @@
                 <artifactId>maven-bundle-plugin</artifactId>
                 <configuration>
                     <instructions>
+<<<<<<< HEAD
                         <Bundle-SymbolicName>${pom.artifactId}</Bundle-SymbolicName>
                         <Bundle-Version>${pom.version}</Bundle-Version>
                         <Private-Package>org.apache.aries.samples.ariestrader.core.*</Private-Package>
                         <Export-Package>!org.apache.aries.samples.ariestrader.core.*</Export-Package>
+=======
+                        <Private-Package>org.apache.aries.samples.ariestrader.core.*</Private-Package>
+                        <Export-Package>!org.apache.aries.samples.ariestrader.core.*</Export-Package>
+                        <Import-Package>org.apache.aries.samples.ariestrader.api;provide:=true,*</Import-Package>
+>>>>>>> refs/remotes/apache/trunk
                     </instructions>
                 </configuration>
             </plugin>
